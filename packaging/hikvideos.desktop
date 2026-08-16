@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=HikVideos
+GenericName=Récupération d'enregistrements caméra
+Comment=Télécharger les enregistrements d'une caméra Hikvision autonome
+Exec=hikvideos-qt
+Icon=hikvideos
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=camera;hikvision;video;surveillance;enregistrement;
+StartupNotify=true

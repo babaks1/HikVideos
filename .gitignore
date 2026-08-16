@@ -1,0 +1,13 @@
+Downloads/
+__pycache__
+dist
+MANIFEST
+hikvideos.egg-info
+.vscode
+build
+venv
+
+# Vidéos récupérées
+*.mp4
+*.mkv
+*.avi

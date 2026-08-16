@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="corps" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a5568"/>
+      <stop offset="1" stop-color="#2d3748"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="112" height="112" rx="24" fill="#1a202c"/>
+
+  <!-- Corps de la camera, vue de profil -->
+  <rect x="24" y="40" width="56" height="34" rx="6" fill="url(#corps)"/>
+  <!-- Objectif -->
+  <circle cx="38" cy="57" r="10" fill="#0f1419"/>
+  <circle cx="38" cy="57" r="6" fill="#2b6cb0"/>
+  <circle cx="35.5" cy="54.5" r="2.2" fill="#90cdf4"/>
+  <!-- Support mural -->
+  <rect x="80" y="52" width="16" height="10" rx="3" fill="#4a5568"/>
+  <rect x="94" y="44" width="8" height="26" rx="3" fill="#2d3748"/>
+
+  <!-- Fleche de telechargement -->
+  <g fill="#48bb78">
+    <rect x="58" y="78" width="12" height="22" rx="3"/>
+    <path d="M 48 96 L 80 96 L 64 116 Z"/>
+  </g>
+</svg>
