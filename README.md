@@ -109,6 +109,7 @@ et les problèmes courants.
 Ce dépôt est un fork de [Tedyst/HikLoad](https://github.com/Tedyst/HikLoad),
 dont le développement s'est arrêté en novembre 2023. Le travail original est
 de Stoica Tedy, sous licence MIT, conservée à l'identique.
+Ce fork est distribué sous GPL v3 (voir [Licence](#licence)).
 
 Il part de la version 1.1.4 publiée sur PyPI — celle qu'installe `pip` — et
 non de la branche principale du dépôt d'origine, dont elle avait divergé.
@@ -134,7 +135,16 @@ L'interface graphique a été retravaillée pour l'usage sur caméra autonome :
 
 ## Licence
 
-MIT — voir [LICENSE](LICENSE). Travail original de Stoica Tedy, 2019.
+**GPL v3** — voir [LICENSE](LICENSE). Copyright © 2026 Benjamin TABAKIAN.
+
+Vous pouvez utiliser, modifier et redistribuer ce logiciel librement, y
+compris commercialement, à condition de publier le code source de toute
+version modifiée sous la même licence.
+
+Le travail d'origine est de Stoica Tedy, 2019
+— [Tedyst/HikLoad](https://github.com/Tedyst/HikLoad) — sous licence MIT,
+conservée dans [LICENSE-MIT-HikLoad](LICENSE-MIT-HikLoad). Le détail des deux
+licences est expliqué dans [LICENSES.md](LICENSES.md).
 
 Projet indépendant, sans lien avec Hangzhou Hikvision Digital Technology.
 « Hikvision » est une marque de son propriétaire et n'est mentionnée ici que

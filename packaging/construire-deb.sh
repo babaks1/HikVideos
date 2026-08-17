@@ -61,6 +61,9 @@ FIN
 # --- Documentation -------------------------------------------------------
 install -Dm644 "$ICI/README.md" "$BUILD/usr/share/doc/hikvideos/README.md"
 install -Dm644 "$ICI/LICENSE" "$BUILD/usr/share/doc/hikvideos/copyright"
+# Le travail d'origine reste sous MIT : sa licence accompagne le paquet.
+install -Dm644 "$ICI/LICENSE-MIT-HikLoad" \
+    "$BUILD/usr/share/doc/hikvideos/LICENSE-MIT-HikLoad"
 
 # --- Métadonnées ---------------------------------------------------------
 TAILLE=$(du -sk "$BUILD" | cut -f1)
@@ -83,7 +86,7 @@ Description: Récupérer les enregistrements d'une caméra Hikvision
  .
  Toutes les dépendances Python sont embarquées : aucune installation
  supplémentaire n'est nécessaire.
-Homepage: https://github.com/Tedyst/HikLoad
+Homepage: https://github.com/babaks1/HikVideos
 FIN
 
 # Rafraîchit les caches après installation et après retrait, sans quoi

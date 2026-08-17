@@ -90,5 +90,5 @@ discussion.
 
 ## Licence
 
-Toute contribution est publiée sous licence MIT, comme le reste du projet
-(voir [LICENSE](LICENSE)).
+Toute contribution est publiée sous licence GPL v3, comme le reste du projet
+(voir [LICENSE](LICENSE) et [LICENSES.md](LICENSES.md)).
