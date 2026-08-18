@@ -20,6 +20,22 @@ class HikvisionServer:
     """
 
     def __init__(self, host, user, password, protocol="http"):
+        # L'adresse est attendue sans protocole ni chemin : le préfixe est
+        # ajouté plus bas. Saisir « http://192.168.1.24 » produisait une URL
+        # « http://user:pass@http://192.168.1.24/ISAPI », rejetée par
+        # requests avec un message incompréhensible. On nettoie plutôt que
+        # de laisser échouer.
+        host = (host or "").strip()
+        for prefixe in ("https://", "http://"):
+            if host.lower().startswith(prefixe):
+                if prefixe == "https://":
+                    protocol = "https"
+                host = host[len(prefixe):]
+                break
+        # Une barre oblique finale, ou un chemin collé à l'adresse, casse
+        # la construction de l'URL de la même manière.
+        host = host.rstrip("/").split("/")[0]
+
         self.host = host
         self.protocol = protocol
         self.user = user

@@ -404,18 +404,20 @@ def search_for_recordings(server: hikvisionapi.HikvisionServer, args) -> List[Re
             recordinglist = [recordinglist]
         result = []
         for i in recordinglist:
+            type_contenu = i['mediaSegmentDescriptor']['contentType']
+            logging.debug("Enregistrement de type %s sur le flux %s" % (
+                type_contenu, cid))
+            # Le filtre était écrit après l'ajout à la liste : il ne
+            # filtrait donc rien, et les enregistrements non vidéo
+            # (photos, métadonnées) se retrouvaient dans la sélection.
+            if type_contenu != 'video':
+                continue
             result.append(Recording(
                 cid=cid,
                 cname=cname,
                 url=i['mediaSegmentDescriptor']['playbackURI'],
                 startTime=i['timeSpan']['startTime']
             ))
-            logging.debug("Found recording type %s on channel %s" % (
-                i['mediaSegmentDescriptor']['contentType'], cid
-            ))
-            if i['mediaSegmentDescriptor']['contentType'] != 'video':
-                # This recording is not a video, skip it
-                continue
         downloadQueue.extend(result)
     end_time = time.perf_counter()
     run_time = end_time - start_time
