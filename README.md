@@ -104,6 +104,9 @@ hikvideos --server X.X.X.X --username admin \
 La [notice d'utilisation](docs/notice.md) détaille chaque écran, chaque option
 et les problèmes courants.
 
+Le [journal des versions](CHANGELOG.md) récapitule ce qui a changé d'une
+version à l'autre.
+
 ## Différences avec le projet d'origine
 
 Ce dépôt est un fork de [Tedyst/HikLoad](https://github.com/Tedyst/HikLoad),
