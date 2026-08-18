@@ -151,6 +151,33 @@ def _marquer_icone_bureau():
         pass
 
 
+def _raccourci_bureau_perime(exe_attendu):
+    """Le raccourci du bureau désigne-t-il un autre exécutable ?
+
+    Cas rencontré : l'exécutable autonome avait été lancé une première fois
+    et s'était recopié dans le dossier personnel ; l'installation ultérieure
+    du paquet n'a pas touché ce raccourci, qui a continué de lancer une
+    version périmée. Deux copies coexistaient, et le comportement dépendait
+    du chemin emprunté — bureau ou menu.
+    """
+    bureau = _dossier_bureau()
+    if not bureau:
+        return False
+    cible = os.path.join(bureau, "hikvideos.desktop")
+    if not os.path.isfile(cible) or not _est_notre_lanceur(cible):
+        return False
+    try:
+        with open(cible, encoding="utf-8") as f:
+            contenu = f.read()
+    except OSError:
+        return False
+    for ligne in contenu.splitlines():
+        if ligne.startswith("Exec="):
+            actuel = ligne[len("Exec="):].strip()
+            return os.path.realpath(actuel) != os.path.realpath(exe_attendu)
+    return False
+
+
 def deja_installe():
     if installe_par_le_systeme():
         # Le paquet a posé le raccourci du menu, mais aucun .deb ne peut
@@ -158,7 +185,11 @@ def deja_installe():
         # utilisateur, et le paquet s'installe pour toute la machine.
         # GNOME ne permet plus non plus de tirer une application du menu
         # vers le bureau — sans ce passage, l'icône n'existerait nulle part.
+        if _raccourci_bureau_perime(sys.executable):
+            return False
         return _icone_bureau_posee()
+    if _raccourci_bureau_perime(EXE_INSTALLE):
+        return False
     return os.path.isfile(LANCEUR) and os.path.isfile(EXE_INSTALLE)
 
 

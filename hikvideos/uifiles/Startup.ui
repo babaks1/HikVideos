@@ -172,7 +172,12 @@
             </item>
             <item>
              <property name="text">
-              <string>avi</string>
+              <string>avi (vidéos anciennes uniquement)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Format d'origine (sans conversion)</string>
              </property>
             </item>
            </widget>
@@ -254,14 +259,14 @@
          <item>
           <widget class="QCheckBox" name="ffmpeg">
            <property name="text">
-            <string>Utiliser ffmpeg au lieu du téléchargement direct</string>
+            <string>Méthode de secours, plus lente (si le téléchargement échoue)</string>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QCheckBox" name="forcetranscoding">
            <property name="text">
-            <string>Reconvertir la vidéo (fichier endommagé)</string>
+            <string>Réparer une vidéo illisible (très lent)</string>
            </property>
           </widget>
          </item>

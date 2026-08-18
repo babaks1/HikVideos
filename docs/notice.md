@@ -33,6 +33,11 @@ autonome, ses disques sur un enregistreur. Sans support d'enregistrement, ou
 si aucun enregistrement n'a été déclenché, les recherches ne renverront rien —
 sans que ce soit une panne.
 
+Côté ordinateur, **ffmpeg** doit être présent : c'est lui qui met les vidéos
+dans un format exploitable. Le paquet `.deb` l'installe automatiquement. S'il
+venait à manquer, HikVideos vous prévient au démarrage ; il suffit alors de
+lancer `sudo apt install ffmpeg`.
+
 ---
 
 ## Fenêtre de démarrage
@@ -146,16 +151,38 @@ Quatre raccourcis évitent la saisie manuelle :
 | Option | Effet |
 |---|---|
 | **Classement des vidéos** | Tout dans le même dossier, ou un sous-dossier par caméra, par jour, par mois ou par an. |
-| **Format vidéo** | `mp4` (conseillé), `mkv` ou `avi`. L'extension du fichier suit réellement le choix. |
+| **Format vidéo** | Voir le tableau ci-dessous. `mp4` convient dans la plupart des cas. |
 | **Nommer les fichiers à l'heure locale** | Cochée par défaut : les noms de fichiers portent votre heure et non l'heure UTC. |
 | **Remplacer les fichiers déjà téléchargés** | Retélécharge par-dessus un fichier existant. Voir la réserve ci-dessous. |
 | **Mode diagnostic** | Journal détaillé, utile pour signaler une anomalie. Le mot de passe y est masqué, mais il contient votre adresse IP. |
-| **Utiliser ffmpeg au lieu du téléchargement direct** | Chemin alternatif passant par ffmpeg. Le téléchargement direct est plus rapide et suffit dans la plupart des cas. |
-| **Reconvertir la vidéo (fichier endommagé)** | Force une reconversion par ffmpeg, à essayer si une vidéo obtenue est illisible. |
+| **Méthode de secours, plus lente** | À cocher seulement si le téléchargement échoue. Au lieu de demander le fichier à la caméra, HikVideos écoute son flux et l'enregistre au fil de l'eau — ce qui prend le temps réel de la vidéo. Certaines caméras refusent d'envoyer leurs fichiers : c'est le cas où cette option sert. |
+| **Réparer une vidéo illisible** | Refabrique l'image entièrement au lieu de la recopier. Très lent — plusieurs minutes — et la qualité baisse légèrement. À réserver aux fichiers abîmés qui refusent de s'ouvrir. |
 
-> **Réserve connue.** *Remplacer les fichiers déjà téléchargés* n'agit que sur
-> le chemin ffmpeg. En téléchargement direct — celui utilisé par défaut — la
-> case n'a aujourd'hui aucun effet. Correctif prévu.
+> **Réserve connue.** *Remplacer les fichiers déjà téléchargés* n'agit que si
+> *Méthode de secours* est également cochée. En téléchargement direct — celui
+> utilisé par défaut — les fichiers existants sont de toute façon remplacés,
+> et la case n'a aucun effet. Correctif prévu.
+
+### Choisir le format vidéo
+
+Une caméra n'enregistre pas dans le format qu'elle vous livre au final : elle
+utilise le sien, souvent un conteneur ancien que les logiciels modernes
+acceptent mal. HikVideos le transvase donc dans le format demandé.
+
+Ce transvasement **ne retouche pas l'image** : elle est recopiée telle quelle,
+sans perte de qualité, en quelques secondes même sur un gros fichier.
+
+| Choix | Quand le prendre |
+|---|---|
+| **mp4** *(par défaut)* | Le plus compatible : téléphones, logiciels de montage, partage. Convient dans presque tous les cas. |
+| **mkv** | Accepte tous les types de vidéo et de son sans exception. Utile si le mp4 refuse votre enregistrement. |
+| **avi** | Format ancien, réservé aux vieux logiciels. Il ne sait pas transporter les vidéos récentes (H.265) : dans ce cas HikVideos vous prévient et conserve le fichier d'origine. |
+| **Format d'origine (sans conversion)** | Le fichier exact envoyé par la caméra, avec l'extension qui correspond enfin à son contenu. Aucune transformation, donc rien à vérifier : le choix de l'archivage strict, ou d'une vidéo destinée à servir de preuve. |
+
+Dans le doute, laissez **mp4**.
+
+Si la caméra livre déjà le format demandé, aucune conversion n'a lieu : le
+fichier est simplement conservé tel quel.
 
 Le bouton **Rechercher** interroge la caméra et ouvre la fenêtre suivante. Il
 ne télécharge rien : rechercher et télécharger sont deux étapes distinctes,
@@ -273,7 +300,7 @@ Options les plus utiles :
 | `--starttime`, `--endtime` | Période, au format ISO (`2026-08-16T14:30:00`). |
 | `--yesterday` | Raccourci pour la journée d'hier. |
 | `--days` | Nombre de jours en arrière. |
-| `--videoformat` | `mp4`, `mkv` ou `avi`. |
+| `--videoformat` | `mp4`, `mkv`, `avi` ou `original`. |
 | `--folders` | `onepercamera`, `oneperday`, `onepermonth`, `oneperyear`. |
 | `--localtimefilenames` | Nomme les fichiers à l'heure locale. |
 | `--cameras` | Canaux à interroger, séparés par des virgules. |
@@ -304,9 +331,20 @@ pour élargir. Vérifiez aussi que le support d'enregistrement est présent
 (carte microSD ou disques de l'enregistreur) et que l'appareil est configuré
 pour enregistrer. Sur enregistreur, contrôlez que les bons canaux sont cochés.
 
+**HikVideos annonce que ffmpeg est introuvable.**
+Lancez `sudo apt install ffmpeg` dans un terminal, puis relancez HikVideos.
+Sans lui, les vidéos sont bien téléchargées, mais restent au format brut de la
+caméra — que beaucoup de lecteurs refusent.
+
+**Une vidéo ne s'ouvre pas dans mon logiciel de montage.**
+Vérifiez le format choisi à l'écran de démarrage. Le *format d'origine*
+conserve le conteneur de la caméra, que beaucoup de logiciels refusent :
+reprenez le téléchargement en **mp4**.
+
 **Une vidéo téléchargée est illisible.**
-Cochez *Reconvertir la vidéo (fichier endommagé)* et retéléchargez-la. Certains
-flux exigent un ré-encodage par ffmpeg.
+Cochez *Réparer une vidéo illisible* et retéléchargez-la. L'image est alors
+refabriquée entièrement, ce qui répare la plupart des fichiers abîmés — mais
+comptez plusieurs minutes.
 
 **Le téléchargement s'arrête en cours de route.**
 Consultez le journal, qui indique le fichier fautif. Un disque plein ou une

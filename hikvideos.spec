@@ -18,6 +18,7 @@ a = Analysis(
     hiddenimports=[
         'xmler', 'lxml._elementpath', 'premier_lancement',
         'hikvideos', 'hikvideos.ui', 'hikvideos.download', 'hikvideos.__main__',
+        'hikvideos.config', 'hikvideos.conteneur',
         'hikvideos.uifiles', 'hikvideos.uifiles.Startup',
         'hikvideos.uifiles.MainWindow',
         'hikvideos.hikvisionapi', 'hikvideos.hikvisionapi.classes',

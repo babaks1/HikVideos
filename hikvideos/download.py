@@ -14,7 +14,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 import hikvideos.hikvisionapi as hikvisionapi
 from hikvideos.hikvisionapi.classes import HikvisionException
-from hikvideos import config
+from hikvideos import config, conteneur
 
 
 class Recording():
@@ -49,8 +49,11 @@ def parse_args():
                         help='create a separate folder per camera/duration (default: disabled)')
     parser.add_argument('--debug', action=argparse.BooleanOptionalAction, dest="debug",
                         help='enable debug mode (default: false)')
-    parser.add_argument('--videoformat', dest="videoformat", default="mp4", choices=['mkv', 'mp4', 'avi'],
-                        help='specify video format (default: mp4)')
+    parser.add_argument('--videoformat', dest="videoformat", default="mp4",
+                        choices=['mkv', 'mp4', 'avi', 'original'],
+                        help="specify video format; 'original' keeps the "
+                             "camera's own container without conversion "
+                             "(default: mp4)")
     parser.add_argument('--downloads', dest="downloads", default=os.path.join(os.getcwd(), "Downloads"),
                         help='the downloads folder (default: "Downloads")')
     parser.add_argument('--frames', dest="frames", type=int,
@@ -103,13 +106,130 @@ def create_folder_and_chdir(dir):
     os.chdir(os.path.normpath(path))
 
 
+def finaliser_fichier(temporaire, filename, cid, args):
+    """Donne au fichier téléchargé son conteneur et son extension définitifs.
+
+    La caméra livre son propre format — les modèles testés renvoient du
+    MPEG-PS, d'autres livrent peut-être déjà du MP4. On analyse ce qui a
+    été reçu au lieu de le supposer, et on ne convertit que si le conteneur
+    ne correspond pas à ce qui est demandé.
+
+    Le fichier téléchargé n'est supprimé qu'une fois le converti écrit et
+    relu : une conversion qui échoue laisse la vidéo intacte, sous son
+    format d'origine, plutôt que de la perdre.
+
+    Renvoie le nom du fichier finalement obtenu.
+    """
+    infos = conteneur.analyser(temporaire)
+    if infos is None:
+        logging.warning(
+            "Format du fichier non reconnu : conservé tel quel (%s)", temporaire)
+
+    format_demande = getattr(args, 'videoformat', 'mp4')
+
+    # Découpe et réencodage imposent de faire travailler ffmpeg, quel que
+    # soit le conteneur reçu.
+    debut = getattr(args, 'skipseconds', None) or None
+    duree = getattr(args, 'seconds', None)
+    if duree in (0, 9999999):
+        duree = None
+    reencoder = bool(getattr(args, 'forcetranscoding', False))
+    traitement_demande = bool(debut or duree or reencoder)
+
+    # « original » : aucune conversion, mais une extension qui correspond
+    # enfin au contenu réel du fichier.
+    if format_demande == 'original' and not traitement_demande:
+        extension = conteneur.extension_pour(infos)
+        return _renommer(temporaire, filename, cid, extension, args)
+
+    if format_demande == 'original':
+        # Découper impose de réécrire le fichier : on garde le conteneur
+        # d'origine comme cible.
+        format_demande = conteneur.extension_pour(infos)
+        if format_demande not in conteneur.FORMATS_FFMPEG:
+            format_demande = 'mkv'
+
+    if (infos is not None and not traitement_demande
+            and not conteneur.conversion_necessaire(infos, format_demande)):
+        logging.debug(
+            "Le fichier est déjà au format %s : aucune conversion",
+            format_demande)
+        return _renommer(temporaire, filename, cid, format_demande, args)
+
+    # Certains conteneurs ne savent pas transporter le codec de la caméra :
+    # l'AVI, par exemple, ignore le H.265. Plutôt que d'écrire un fichier
+    # que ffmpeg accepte mais qu'aucun lecteur n'ouvre, on conserve la
+    # vidéo dans son format d'origine et on le dit.
+    codec = infos.get('codec_video') if infos else None
+    if not reencoder and not conteneur.conteneur_supporte_video(
+            format_demande, codec):
+        extension = conteneur.extension_pour(infos)
+        garde = _renommer(temporaire, filename, cid, extension, args)
+        logging.warning(
+            "Le format %s ne peut pas contenir de vidéo %s : le fichier est "
+            "conservé au format d'origine (%s). Choisissez mp4 ou mkv pour "
+            "ce type d'enregistrement.",
+            format_demande, codec, os.path.basename(garde))
+        return garde
+
+    destination = _nom_final(filename, cid, format_demande, args)
+    provisoire = destination + '.encours'
+
+    logging.debug("Conversion vers %s", format_demande)
+    if not conteneur.convertir(temporaire, provisoire, format_demande, infos,
+                               debut=debut, duree=duree, reencoder=reencoder):
+        # Échec : on garde la vidéo telle qu'elle est arrivée plutôt que de
+        # la perdre. L'extension reflète son contenu réel.
+        _supprimer_si_present(provisoire)
+        extension = conteneur.extension_pour(infos)
+        garde = _renommer(temporaire, filename, cid, extension, args)
+        logging.error(
+            "Conversion impossible : le fichier est conservé au format "
+            "d'origine (%s)", garde)
+        return garde
+
+    _supprimer_si_present(destination)
+    os.replace(provisoire, destination)
+    _supprimer_si_present(temporaire)
+    return destination
+
+
+def _nom_final(filename, cid, extension, args):
+    """Nom définitif, selon que les vidéos sont rangées par dossier ou non."""
+    if getattr(args, 'folders', None):
+        return "%s.%s" % (filename, extension)
+    return "%s-%s.%s" % (filename, cid, extension)
+
+
+def _renommer(temporaire, filename, cid, extension, args):
+    """Renomme le fichier téléchargé sans toucher à son contenu."""
+    destination = _nom_final(filename, cid, extension, args)
+    if os.path.abspath(destination) != os.path.abspath(temporaire):
+        _supprimer_si_present(destination)
+        os.replace(temporaire, destination)
+    return destination
+
+
+def _supprimer_si_present(chemin):
+    """Supprime un fichier sans échouer s'il n'existe pas."""
+    try:
+        os.remove(chemin)
+    except OSError:
+        pass
+
+
 def video_download_from_channel(server: hikvisionapi.HikvisionServer, args, url, filename, cid,
                                 progress_callback=None):
     start_time = time.perf_counter()
+    # Nom provisoire : avec « original », comme lorsque la caméra livre un
+    # format inattendu, l'extension définitive n'est connue qu'après analyse
+    # du fichier reçu.
+    extension_probable = ('mp4' if args.videoformat == 'original'
+                          else args.videoformat)
     if args.folders:
-        name = "%s.%s" % (filename, args.videoformat)
+        name = "%s.%s" % (filename, extension_probable)
     else:
-        name = "%s-%s.%s" % (filename, cid, args.videoformat)
+        name = "%s-%s.%s" % (filename, cid, extension_probable)
     logging.debug("Started downloading %s" % name)
     logging.debug(
         "Files to download: (url: %r, name: %r)" % (url, name))
@@ -134,10 +254,14 @@ def video_download_from_channel(server: hikvisionapi.HikvisionServer, args, url,
                 "Could not download %s. Try to remove --fmpeg." % name)
             logging.error(e)
     else:
+        # Extension neutre : le format réel n'est connu qu'une fois le
+        # fichier reçu. L'ancienne version le nommait « .mp4 » d'emblée,
+        # ce qui produisait des fichiers dont l'extension mentait sur le
+        # contenu quand la caméra livrait autre chose.
         if args.folders:
-            temporaryname = "%s.mp4" % filename
+            temporaryname = "%s.part" % filename
         else:
-            temporaryname = "%s-%s.mp4" % (filename, cid)
+            temporaryname = "%s-%s.part" % (filename, cid)
         try:
             r = server.ContentMgmt.search.downloadURI(url)
         except hikvisionapi.HikvisionError as e:
@@ -193,22 +317,17 @@ def video_download_from_channel(server: hikvisionapi.HikvisionServer, args, url,
         if interrompu:
             logging.info("Téléchargement interrompu : %s" % name)
             return
+        # Les paramètres n'ont d'intérêt qu'en diagnostic : le mot de passe
+        # y est masqué par le filtre installé au démarrage.
+        logging.debug(args)
         try:
-            # Les paramètres n'ont d'intérêt qu'en diagnostic : ils
-            # contiennent le mot de passe, et n'ont rien à faire dans le
-            # journal affiché à l'utilisateur.
-            logging.debug(args)
-            # processSavedVideo renvoie le nom réellement obtenu : le
-            # téléchargement arrive toujours en .mp4, une conversion vers
-            # mkv ou avi change donc l'extension.
-            name = hikvisionapi.processSavedVideo(
-                temporaryname, debug=args.debug, skipSeconds=args.skipseconds,
-                seconds=args.seconds, fileFormat=args.videoformat,
-                forceTranscode=args.forcetranscoding) or name
-        except ffmpeg.Error as e:
+            name = finaliser_fichier(temporaryname, filename, cid, args)
+        except conteneur.OutilManquant as e:
+            logging.error("%s", e)
             logging.error(
-                "Could not transcode %s. Try to remove --forcetranscoding." % name)
-            logging.error(e)
+                "Le fichier a été téléchargé mais n'a pas pu être converti : %s",
+                temporaryname)
+            return
     if os.environ.get('RUNNING_IN_DOCKER') == 'TRUE':
         os.chmod(name, 0o777)
     end_time = time.perf_counter()

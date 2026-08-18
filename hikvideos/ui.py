@@ -15,7 +15,7 @@ from hikvideos.hikvisionapi.classes import HikvisionServer
 from hikvideos.uifiles.MainWindow import Ui_MainWindow
 from hikvideos.uifiles.Startup import Ui_Startup
 
-from . import config
+from . import config, conteneur
 from .download import (create_folder_and_chdir, download_recording,
                        search_for_recordings, search_for_recordings_mock)
 
@@ -235,6 +235,12 @@ class downloadThread(threading.Thread):
         logger.info("Tous les enregistrements ont été téléchargés")
 
 
+# Ordre des formats dans la liste déroulante. Il doit suivre exactement
+# celui de uifiles/Startup.ui : Qt ne transmet que la position choisie.
+# Regroupé ici pour n'avoir qu'un seul endroit à corriger.
+FORMATS_VIDEO = ['mkv', 'mp4', 'avi', 'original']
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Deroulement : parametres -> recherche -> selection -> telechargement."""
 
@@ -260,7 +266,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.logtimer.timeout.connect(self._tick)
         self.logtimer.start(200)
 
+        self._avertir_si_ffmpeg_absent()
         self._open_startup()
+
+    def _avertir_si_ffmpeg_absent(self):
+        """Prévient au démarrage plutôt qu'au premier échec de conversion.
+
+        ffmpeg met les vidéos dans un conteneur exploitable : sans lui, les
+        fichiers restent au format brut de la caméra. Le paquet .deb
+        l'installe automatiquement, mais rien ne le garantit pour un
+        exécutable lancé seul.
+        """
+        try:
+            conteneur.verifier_outils()
+        except conteneur.OutilManquant as e:
+            logging.warning("%s", e)
+            QtWidgets.QMessageBox.warning(
+                self, "HikVideos",
+                "%s\n\nLes vidéos pourront être téléchargées, mais elles "
+                "resteront au format d'origine de la caméra, que certains "
+                "lecteurs refusent." % e)
 
     # ------------------------------------------------------------------
     # Interface
@@ -907,16 +932,56 @@ class Startup(QtWidgets.QDialog):
         grille.addWidget(libelle_dossier, 4, 0, 1, 1)
         grille.addLayout(champ_dossier, 4, 2, 1, 1)
 
-        # Le libellé de la case reste court ; le détail va en infobulle.
-        self.ui.forcetranscoding.setToolTip(
-            "Inutile en temps normal et plus lent : la vidéo est déjà au bon "
-            "format.\nPeut réparer un fichier endommagé. Nécessite ffmpeg.")
+        # Le libellé de la case reste court ; le détail technique va en
+        # infobulle, pour qui veut savoir ce qui se passe réellement.
         self.ui.ffmpeg.setToolTip(
-            "Capte le flux vidéo au lieu de demander le fichier à la caméra.\n"
-            "Plus lent : à essayer si le téléchargement direct échoue.")
+            "Change la façon de récupérer la vidéo.\n"
+            "\n"
+            "Normalement, HikVideos demande le fichier à la caméra, qui "
+            "l'envoie\nd'un bloc — quelques secondes suffisent.\n"
+            "\n"
+            "Avec cette option, ffmpeg se connecte au flux RTSP de la caméra "
+            "et\nl'enregistre au fil de l'eau : récupérer dix minutes de "
+            "vidéo prend\ndix minutes.\n"
+            "\n"
+            "Utile uniquement si la caméra refuse d'envoyer ses fichiers "
+            "(certains\nmodèles ne gèrent pas le téléchargement par nom ou "
+            "par date).")
+        self.ui.forcetranscoding.setToolTip(
+            "Change la façon de traiter la vidéo après téléchargement.\n"
+            "\n"
+            "Normalement, l'image est recopiée telle quelle d'un format à "
+            "l'autre :\naucune perte, quelques secondes même sur un gros "
+            "fichier.\n"
+            "\n"
+            "Avec cette option, ffmpeg décode chaque image puis la "
+            "réencode\nentièrement. Comptez plusieurs minutes, et une légère "
+            "perte de qualité.\n"
+            "\n"
+            "À réserver aux fichiers abîmés qu'aucun lecteur n'ouvre : le "
+            "réencodage\nrépare souvent ce que la simple recopie ne corrige "
+            "pas.")
+        self.ui.video_format.setToolTip(
+            "La caméra livre ses enregistrements dans son propre format, "
+            "souvent\nun conteneur ancien que les logiciels récents "
+            "acceptent mal.\n"
+            "\n"
+            "HikVideos transvase la vidéo dans le format choisi. L'image "
+            "n'est pas\nretouchée : elle est recopiée telle quelle, sans "
+            "perte de qualité.\n"
+            "\n"
+            "mp4 — le plus compatible, à garder en cas de doute\n"
+            "mkv — accepte tous les types de vidéo et de son\n"
+            "avi — format ancien, incompatible avec les vidéos H.265\n"
+            "Format d'origine — le fichier exact de la caméra, sans "
+            "transformation\n"
+            "\n"
+            "Si la caméra livre déjà le format demandé, rien n'est converti.")
         self.ui.force.setToolTip(
-            "Sans cette option, une vidéo déjà présente sur le disque n'est "
-            "pas retéléchargée.")
+            "Sans effet sur le téléchargement direct : les fichiers existants "
+            "sont\ndans tous les cas remplacés.\n"
+            "\n"
+            "N'agit que si « Méthode de secours » est également cochée.")
 
     def populate_with_args(self, args=None):
         self.ui.server_ip.setText(args.server)
@@ -925,8 +990,13 @@ class Startup(QtWidgets.QDialog):
         self.ui.password.setText(args.password)
         self.ui.folder_behavior.setCurrentIndex(list.index(
             [None, 'onepercamera', 'oneperday', 'onepermonth', 'oneperyear'], args.folders))
-        self.ui.video_format.setCurrentIndex(
-            list.index(['mkv', 'mp4', 'avi'], args.videoformat))
+        # Un format inconnu (fichier de configuration d'une version
+        # ultérieure, par exemple) ne doit pas empêcher le démarrage.
+        try:
+            self.ui.video_format.setCurrentIndex(
+                FORMATS_VIDEO.index(args.videoformat))
+        except ValueError:
+            self.ui.video_format.setCurrentIndex(FORMATS_VIDEO.index('mp4'))
         # ui_starttime/ui_endtime = valeurs locales memorisees d'une session
         # a l'autre. Au 1er lancement, args.starttime vient de la ligne de
         # commande et est deja exprime en heure locale.
@@ -955,8 +1025,8 @@ class Startup(QtWidgets.QDialog):
         config.proteger_journal(self.args.password)
         self.args.folders = [None, 'onepercamera', 'oneperday',
                              'onepermonth', 'oneperyear'][self.ui.folder_behavior.currentIndex()]
-        self.args.videoformat = ['mkv', 'mp4',
-                                 'avi'][self.ui.video_format.currentIndex()]
+        self.args.videoformat = FORMATS_VIDEO[
+            self.ui.video_format.currentIndex()]
         # L'utilisateur saisit de l'heure locale ; download.py suffixe la
         # valeur par "Z" donc la camera l'interprete comme de l'UTC.
         local_start = self.ui.start_date.dateTime().toPyDateTime()

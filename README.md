@@ -5,7 +5,7 @@ enregistreur**, depuis Linux.
 
 ## Installation
 
-**[⬇️ Télécharger HikVideos 1.2.1](https://github.com/babaks1/HikVideos/releases/download/v1.2.1/hikvideos_1.2.1_amd64.deb)**
+**[⬇️ Télécharger HikVideos 1.3.0](https://github.com/babaks1/HikVideos/releases/download/v1.3.0/hikvideos_1.3.0_amd64.deb)**
 
 Double-cliquez sur le fichier téléchargé : le logiciel d'installation d'Ubuntu
 s'ouvre, cliquez sur *Installer*.
@@ -127,6 +127,12 @@ L'interface graphique a été retravaillée pour l'usage sur caméra autonome :
   demander 00:00–23:59 cherchait en réalité de 02:00 à 01:59. Corrigé.
 - **Date et heure séparées**, avec des raccourcis de période.
 - **Correction de `--cameras`**, que la sélection automatique écrasait.
+- **Fichiers réellement convertis** : demander du `mp4` produisait un fichier
+  au format brut de la caméra, simplement renommé — l'extension mentait sur
+  son contenu, et les logiciels de montage le refusaient. Le conteneur reçu
+  est désormais analysé, puis converti si nécessaire, sans jamais retoucher
+  l'image. Un choix **Format d'origine** conserve le fichier tel quel, avec
+  l'extension qui lui correspond.
 - **Journal épuré** et horodaté.
 - **Suppression de la fonction « photos »**, expérimentale et inutilisée,
   corrigée dans le fichier d'interface source pour ne pas réapparaître.

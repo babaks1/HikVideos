@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'hikvideos/uifiles/Startup.ui'
+# Form implementation generated from reading ui file 'Startup.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.11
 #
@@ -81,6 +81,7 @@ class Ui_Startup(object):
         self.video_format = QtWidgets.QComboBox(self.groupBox)
         self.video_format.setPlaceholderText("")
         self.video_format.setObjectName("video_format")
+        self.video_format.addItem("")
         self.video_format.addItem("")
         self.video_format.addItem("")
         self.video_format.addItem("")
@@ -185,14 +186,15 @@ class Ui_Startup(object):
         self.video_format.setCurrentText(_translate("Startup", "mp4 (conseillé)"))
         self.video_format.setItemText(0, _translate("Startup", "mkv"))
         self.video_format.setItemText(1, _translate("Startup", "mp4 (conseillé)"))
-        self.video_format.setItemText(2, _translate("Startup", "avi"))
+        self.video_format.setItemText(2, _translate("Startup", "avi (vidéos anciennes uniquement)"))
+        self.video_format.setItemText(3, _translate("Startup", "Format d\'origine (sans conversion)"))
         self.label_7.setText(_translate("Startup", "Début (heure locale)"))
         self.label_8.setText(_translate("Startup", "Fin (heure locale)"))
         self.debug.setText(_translate("Startup", "Mode diagnostic"))
         self.force.setText(_translate("Startup", "Remplacer les fichiers déjà téléchargés"))
         self.localtime.setText(_translate("Startup", "Nommer les fichiers à l\'heure locale"))
-        self.ffmpeg.setText(_translate("Startup", "Utiliser ffmpeg au lieu du téléchargement direct"))
-        self.forcetranscoding.setText(_translate("Startup", "Reconvertir la vidéo (fichier endommagé)"))
+        self.ffmpeg.setText(_translate("Startup", "Méthode de secours, plus lente (si le téléchargement échoue)"))
+        self.forcetranscoding.setText(_translate("Startup", "Réparer une vidéo illisible (très lent)"))
         self.cameras.setSortingEnabled(False)
         self.cameras.headerItem().setText(0, _translate("Startup", "Flux disponibles"))
         __sortingEnabled = self.cameras.isSortingEnabled()
@@ -201,3 +203,13 @@ class Ui_Startup(object):
         self.cameras.setSortingEnabled(__sortingEnabled)
         self.test_connection_button.setText(_translate("Startup", "Connexion"))
         self.start_downloading_button.setText(_translate("Startup", "Rechercher"))
+
+
+if __name__ == "__main__":
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    Startup = QtWidgets.QDialog()
+    ui = Ui_Startup()
+    ui.setupUi(Startup)
+    Startup.show()
+    sys.exit(app.exec_())
