@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-1.3.1}"
+VERSION="${1:-1.3.2}"
 ARCH="$(dpkg --print-architecture)"
 NOM="hikvideos_${VERSION}_${ARCH}"
 BUILD="$ICI/build/deb/$NOM"
@@ -94,12 +94,64 @@ FIN
 cat > "$BUILD/DEBIAN/postinst" <<'FIN'
 #!/bin/sh
 set -e
+
+EXE=/usr/lib/hikvideos/HikVideos
+
 if [ -x "$(command -v update-desktop-database)" ]; then
     update-desktop-database -q /usr/share/applications || true
 fi
 if [ -x "$(command -v gtk-update-icon-cache)" ]; then
     gtk-update-icon-cache -q -f -t /usr/share/icons/hicolor || true
 fi
+
+# Réparation des raccourcis personnels laissés par une installation
+# antérieure de l'exécutable autonome. Celui-ci se recopie dans
+# ~/.local/share/hikvideos/ et pose ses propres lanceurs ; le paquet, lui,
+# installe dans /usr/lib. Sans ce passage, le raccourci du bureau continue
+# de lancer l'ancienne copie : le bureau et le menu ouvrent alors des
+# versions différentes, sans aucun signe visible.
+#
+# Le script tourne en root : on parcourt les comptes réels et on ne touche
+# qu'aux lanceurs portant notre signature, jamais à ceux que l'utilisateur
+# a écrits lui-même.
+reparer_lanceur() {
+    fichier="$1"
+    proprietaire="$2"
+    [ -f "$fichier" ] || return 0
+    # Signature : nos lanceurs déclarent Name=HikVideos et pointent vers un
+    # exécutable HikVideos. Tout autre contenu appartient à l'utilisateur.
+    grep -q '^Name=HikVideos$' "$fichier" 2>/dev/null || return 0
+    grep -q '^Exec=.*HikVideos' "$fichier" 2>/dev/null || return 0
+    grep -q "^Exec=$EXE" "$fichier" 2>/dev/null && return 0   # déjà bon
+    sed -i "s|^Exec=.*|Exec=$EXE|" "$fichier" 2>/dev/null || return 0
+    chown "$proprietaire" "$fichier" 2>/dev/null || true
+    echo "hikvideos : raccourci mis à jour ($fichier)"
+}
+
+getent passwd | while IFS=: read -r nom _ uid _ _ maison _; do
+    [ "$uid" -ge 1000 ] 2>/dev/null || continue
+    [ "$uid" -lt 65534 ] || continue
+    [ -d "$maison" ] || continue
+
+    # Le dossier bureau est traduit selon la langue du système : son nom
+    # réel est déclaré par XDG. À défaut, on essaie les deux usuels.
+    bureau=""
+    if [ -r "$maison/.config/user-dirs.dirs" ]; then
+        bureau=$(. "$maison/.config/user-dirs.dirs" 2>/dev/null;
+                 eval echo "$XDG_DESKTOP_DIR" 2>/dev/null)
+    fi
+    [ -d "$bureau" ] || bureau="$maison/Bureau"
+    [ -d "$bureau" ] || bureau="$maison/Desktop"
+
+    reparer_lanceur "$bureau/hikvideos.desktop" "$nom"
+    reparer_lanceur "$maison/.local/share/applications/hikvideos.desktop" "$nom"
+
+    if [ -x "$(command -v update-desktop-database)" ] \
+       && [ -d "$maison/.local/share/applications" ]; then
+        update-desktop-database -q "$maison/.local/share/applications" || true
+    fi
+done
+
 exit 0
 FIN
 

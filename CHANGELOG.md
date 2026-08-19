@@ -3,6 +3,20 @@
 Les versions publiées sont téléchargeables depuis la
 [page des releases](../../releases).
 
+## 1.3.2 — 19 août 2026
+
+### Corrigé
+
+- **Le raccourci du bureau est mis à jour à l'installation.** Installer le
+  paquet par-dessus une installation antérieure de l'exécutable autonome
+  laissait le raccourci pointer vers l'ancienne copie : le bureau et le menu
+  ouvraient alors des versions différentes, sans aucun signe visible. Le
+  script d'installation répare désormais les raccourcis concernés, en
+  respectant ceux que l'utilisateur a écrits ou personnalisés.
+
+  Sans effet sur l'installation depuis les sources, dont le raccourci désigne
+  une commande et non un chemin.
+
 ## 1.3.1 — 18 août 2026
 
 ### Corrigé

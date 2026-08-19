@@ -5,7 +5,7 @@ enregistreur**, depuis Linux.
 
 ## Installation
 
-**[⬇️ Télécharger HikVideos 1.3.1](https://github.com/babaks1/HikVideos/releases/download/v1.3.1/hikvideos_1.3.1_amd64.deb)**
+**[⬇️ Télécharger HikVideos 1.3.2](https://github.com/babaks1/HikVideos/releases/download/v1.3.2/hikvideos_1.3.2_amd64.deb)**
 
 Double-cliquez sur le fichier téléchargé : le logiciel d'installation d'Ubuntu
 s'ouvre, cliquez sur *Installer*.
