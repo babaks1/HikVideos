@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
@@ -54,6 +55,12 @@ MESSAGE_SATURATION = (
 # Au-delà, on considère que la caméra ne livrera pas d'images. Large : une
 # connexion RTSP lente met plusieurs secondes à s'établir.
 DELAI_PREMIERE_IMAGE_MS = 15000
+
+# Silence après lequel on considère l'enregistrement terminé. La caméra ne
+# ferme pas la connexion à la fin : elle cesse simplement d'envoyer. Assez
+# long pour absorber un à-coup du réseau, assez court pour que la fin de
+# lecture ne se fasse pas attendre.
+DELAI_FIN_DE_FLUX_MS = 4000
 
 MESSAGE_SANS_IMAGE = (
     "La caméra n'a envoyé aucune image pour cet enregistrement.\n\n"
@@ -212,6 +219,8 @@ class _FilDecodage(QtCore.QThread):
         self._arret = threading.Event()
         self._pause = threading.Event()
         self._sans_image_declenche = False
+        self._fini = False
+        self._derniere_image_a = 0.0
         # Remplacée par la valeur réelle dès que ffmpeg annonce le flux ;
         # 25 i/s n'est qu'un repli si la ligne d'en-tête change de forme.
         self.cadence = 25.0
@@ -226,6 +235,38 @@ class _FilDecodage(QtCore.QThread):
                 processus.kill()
             except Exception:
                 pass
+
+    def _guetter_silence(self):
+        """Surveille l'arrivée des images et coupe court quand elles cessent.
+
+        La caméra ne ferme pas la connexion à la fin de l'enregistrement :
+        elle envoie ses images puis se tait. ffmpeg reste alors bloqué sur un
+        flux qui ne livrera plus rien — mesuré le 20/08/2026, 185 images
+        produites en quelques secondes puis plus de 90 s d'attente sans fin.
+
+        Sans cette surveillance, le signal de fin n'arrivait jamais : la barre
+        de progression restait figée et le bouton « Lire » ne se réactivait
+        pas. Tuer ffmpeg ferme son tuyau, ce qui débloque la lecture et laisse
+        `run()` émettre `fini` normalement.
+        """
+        seuil = DELAI_FIN_DE_FLUX_MS / 1000.0
+        while not self._fini and not self._arret.is_set():
+            time.sleep(0.5)
+            if self._pause.is_set():
+                # En pause on continue de consommer le flux, mais un à-coup
+                # ne doit pas passer pour une fin.
+                self._derniere_image_a = time.monotonic()
+                continue
+            if time.monotonic() - self._derniere_image_a < seuil:
+                continue
+            processus = self._processus
+            if processus is not None and processus.poll() is None:
+                logger.debug("Fin de flux : plus d'image depuis %.1f s.", seuil)
+                try:
+                    processus.kill()
+                except Exception:
+                    pass
+            return
 
     def _sans_image(self):
         """Chien de garde : la caméra n'a rien livré, on coupe court.
@@ -358,6 +399,19 @@ class _FilDecodage(QtCore.QThread):
         octets_par_image = largeur * hauteur * 3
         images = 0
 
+        # La caméra ne ferme PAS la connexion à la fin de l'enregistrement :
+        # elle envoie ses images puis se tait, sans rien signaler. ffmpeg
+        # reste alors bloqué indéfiniment sur un flux qui ne livrera plus
+        # rien (mesuré le 20/08/2026 : 185 images produites en quelques
+        # secondes, puis plus de 90 s d'attente sans fin).
+        #
+        # Sans ce garde-fou, le signal de fin n'arrivait jamais : la barre de
+        # progression restait figée sur son dernier état au lieu d'être menée
+        # au bout, et le bouton « Lire » ne se réactivait pas.
+        self._derniere_image_a = time.monotonic()
+        silence = threading.Thread(target=self._guetter_silence, daemon=True)
+        silence.start()
+
         # Cadence relevée dans l'en-tête du flux par _lire_dimensions().
         cadence = self.cadence
 
@@ -375,6 +429,10 @@ class _FilDecodage(QtCore.QThread):
 
             if images == 0:
                 chien.cancel()
+            # Un simple horodatage : le guetteur s'en sert pour mesurer le
+            # silence. Réarmer un minuteur à chaque image en créerait 25 par
+            # seconde, pour rien.
+            self._derniere_image_a = time.monotonic()
             images += 1
             self.position.emit(int(images / cadence * 1000))
             # copy() : le tampon Python est réutilisé au tour suivant, sans
@@ -385,12 +443,19 @@ class _FilDecodage(QtCore.QThread):
             self.image_prete.emit(image)
 
         chien.cancel()
+        self._fini = True
 
         erreur = b""
         try:
             if self._processus.poll() is None:
                 self._processus.kill()
-            erreur = self._processus.stderr.read() or b""
+            # stderr n'est lu QUE si rien n'a été décodé : quand la lecture
+            # s'est bien passée, ce read() attendrait la fermeture du tuyau,
+            # que ffmpeg tué ne garantit pas — le signal de fin n'était alors
+            # jamais émis et la barre restait figée (constaté le 20/08/2026).
+            if images == 0:
+                self._processus.wait(timeout=2)
+                erreur = self._processus.stderr.read() or b""
         except Exception:
             pass
 
@@ -524,7 +589,23 @@ class Lecteur(QtWidgets.QWidget):
         self.bouton_pause.setEnabled(self._joue)
         self.bouton_arreter.setEnabled(self._joue)
 
-    def _rafraichir_horloge(self, position_ms):
+    def _rafraichir_horloge(self, position_ms, definitif=False):
+        """Affiche la position, et le total seulement s'il est vrai.
+
+        La durée exacte n'existe nulle part avant d'avoir lu le flux : la
+        caméra ne fournit que des horodatages arrondis à la seconde (43 s
+        annoncées pour 41,7 s livrées), le flux RTSP annonce « Duration:
+        N/A », et la taille ne permet pas de la déduire — le débit varie de
+        11 % d'un enregistrement à l'autre (mesuré le 20/08/2026 sur vingt
+        enregistrements).
+
+        Plutôt que d'afficher un total faux qui change en cours de route,
+        on ne montre que la position pendant la lecture. Le total apparaît à
+        la fin, quand il est enfin connu.
+        """
+        if not definitif:
+            self.horloge.setText(_horodatage(position_ms) if position_ms else "")
+            return
         if self._duree_connue > 0:
             # Le total affiché suit la même échelle que la barre : sans cela
             # on lirait « 0:21 / 0:20 », qui ferait douter des deux.
@@ -682,17 +763,21 @@ class Lecteur(QtWidgets.QWidget):
     def _sur_position(self, position_ms):
         """Avance la barre, purement indicative.
 
-        La durée annoncée par la caméra est arrondie à la seconde et dépasse
-        régulièrement la durée réelle du flux : 8 s annoncées pour 7,4 s
-        livrées (mesuré le 20/08/2026). La barre restait donc visiblement
-        incomplète à chaque fin de lecture.
+        La durée exacte n'est jamais connue d'avance : la caméra annonce un
+        arrondi à la seconde de ses horodatages, pas une mesure du flux, et
+        l'écart va dans les deux sens (43 s annoncées pour 41 s livrées,
+        8 s pour 7,4 s — mesuré le 20/08/2026).
 
-        Plutôt que de la compléter après coup, on recale l'échelle dès que le
-        flux dépasse ce qui était prévu : la barre reste honnête pendant la
-        lecture, et arrive au bout quand la vidéo se termine.
+        La barre s'arrêtait donc avant le bout, et l'horloge affichait un
+        décalage permanent (« 0:41 / 0:43 ») pendant toute la lecture. On ne
+        peut pas corriger ça d'avance sans connaître la durée réelle.
+
+        Le total affiché est donc **le plus grand des deux** : l'annonce tant
+        qu'on est dessous, la position réelle si le flux la dépasse. La barre
+        progresse honnêtement, et `_sur_fin()` la mène au bout quand la vidéo
+        se termine — c'est le seul moment où la durée réelle est connue.
         """
-        if position_ms > self.progression.maximum():
-            self.progression.setMaximum(position_ms)
+        self.progression.setMaximum(max(position_ms, self._duree_connue, 1))
         self.progression.setValue(position_ms)
         self._rafraichir_horloge(position_ms)
 
@@ -711,9 +796,12 @@ class Lecteur(QtWidgets.QWidget):
         """
         reel = self.progression.value()
         if reel > 0:
+            # Seul moment où la durée réelle est connue : on l'adopte, la
+            # barre arrive au bout et l'horloge cesse d'annoncer un total
+            # que le flux n'a jamais atteint.
             self._duree_connue = reel
             self.progression.setMaximum(reel)
-            self._rafraichir_horloge(reel)
+            self._rafraichir_horloge(reel, definitif=True)
         self.progression.setValue(self.progression.maximum())
         self.arreter()
 
