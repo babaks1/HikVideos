@@ -15,7 +15,7 @@ from hikvideos.hikvisionapi.classes import HikvisionServer
 from hikvideos.uifiles.MainWindow import Ui_MainWindow
 from hikvideos.uifiles.Startup import Ui_Startup
 
-from . import config, conteneur
+from . import config, conteneur, lecteur as lecteur_module
 from .download import (create_folder_and_chdir, download_recording,
                        search_for_recordings, search_for_recordings_mock)
 
@@ -260,6 +260,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self._setup_tree()
+        self._add_lecteur()
         self._add_controls()
 
         self.logtimer = QtCore.QTimer(self)
@@ -301,6 +302,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._updating_checks = False
         tree.itemChanged.connect(self._on_item_changed)
+        tree.currentItemChanged.connect(self._on_current_item_changed)
         self._add_selection_bar()
 
     def _add_selection_bar(self):
@@ -403,6 +405,50 @@ class MainWindow(QtWidgets.QMainWindow):
             text += "  -  %s" % format_size(total_bytes)
         self.selection_label.setText(text)
 
+    def _on_current_item_changed(self, item, _precedent):
+        """Transmet au lecteur l'enregistrement de la ligne courante."""
+        if not hasattr(self, "lecteur"):
+            return
+        rec = item.data(0, QtCore.Qt.UserRole) if item is not None else None
+        self.lecteur.selectionner(rec)
+
+    def _add_lecteur(self):
+        """Installe la zone de prévisualisation sous le journal.
+
+        Le journal et le lecteur partagent la colonne de gauche dans un
+        séparateur ajustable : selon qu'on surveille un téléchargement ou
+        qu'on compare des enregistrements, c'est l'un ou l'autre qu'on veut
+        agrandir, et l'utilisateur en décide.
+        """
+        self.lecteur = lecteur_module.Lecteur(self)
+
+        journal = self.ui.textEdit
+        parent_layout = getattr(self.ui, "horizontalLayout", None)
+        if parent_layout is None or parent_layout.indexOf(journal) < 0:
+            # Disposition inattendue : plutôt que de renoncer au lecteur,
+            # on l'ajoute en dessous de la grille.
+            self.ui.gridLayout.addWidget(self.lecteur, 3, 0, 1, 1)
+            return
+
+        index = parent_layout.indexOf(journal)
+        stretch = parent_layout.stretch(index)
+
+        separateur = QtWidgets.QSplitter(
+            QtCore.Qt.Vertical, self.ui.centralwidget)
+        parent_layout.removeWidget(journal)
+        journal.setParent(separateur)
+        separateur.addWidget(journal)
+        separateur.addWidget(self.lecteur)
+        # Le journal garde la main au départ : la prévisualisation est un
+        # complément, elle ne doit pas manger l'écran tant qu'on ne s'en
+        # sert pas.
+        separateur.setStretchFactor(0, 2)
+        separateur.setStretchFactor(1, 3)
+        separateur.setCollapsible(0, False)
+        parent_layout.insertWidget(index, separateur)
+        if stretch:
+            parent_layout.setStretch(index, stretch)
+
     def _add_controls(self):
         bar = QtWidgets.QHBoxLayout()
         self.download_button = QtWidgets.QPushButton(
@@ -443,6 +489,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.download_button.setEnabled(modifiable)
         self.stop_button.setEnabled(downloading)
         self.new_button.setEnabled(modifiable)
+        # Deux flux simultanés vers la caméra : la réaction de l'appareil
+        # est inconnue, on l'évite. Un téléchargement qui démarre coupe
+        # donc la prévisualisation en cours.
+        if hasattr(self, "lecteur"):
+            self.lecteur.setEnabled(not downloading)
+            if downloading:
+                self.lecteur.arreter()
 
     def _center(self):
         frameGm = self.frameGeometry()
@@ -470,6 +523,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.progressBar.setMaximum(1)
         self.ui.progressBar.setValue(0)
         self.found_recordings = []
+        # Le lecteur a besoin des identifiants pour bâtir son URL RTSP :
+        # ils ne sont connus qu'une fois le formulaire validé.
+        self.lecteur.definir_camera(
+            self.args.server, self.args.username, self.args.password)
 
         self.show()
         self._center()
@@ -675,6 +732,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if getattr(self, "logtimer", None) is not None:
             self.logtimer.stop()
+
+        # Le lecteur d'abord : son fil de décodage est un QThread, que Qt
+        # détruit avec la fenêtre. S'il tourne encore à ce moment-là, Qt
+        # abandonne le processus (« QThread: Destroyed while thread is still
+        # running ») et la fermeture se solde par un plantage — constaté le
+        # 20/08/2026 en fermant la fenêtre pendant une prévisualisation.
+        if getattr(self, "lecteur", None) is not None:
+            self.lecteur.arreter()
 
         for fil in (getattr(self, "downloadthread", None),
                     getattr(self, "searchthread", None)):

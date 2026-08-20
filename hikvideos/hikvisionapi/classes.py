@@ -8,6 +8,32 @@ class HikvisionException(Exception):
     pass
 
 
+def nettoyer_adresse(host, protocol="http"):
+    """Ramène une adresse saisie à un hôte nu, sans protocole ni chemin.
+
+    Saisir « http://192.168.1.24 » produisait une URL
+    « http://user:pass@http://192.168.1.24/ISAPI », rejetée par requests avec
+    un message incompréhensible. On nettoie plutôt que de laisser échouer.
+
+    Le lecteur intégré en dépend aussi : QUrl.setHost() rejette
+    silencieusement une adresse contenant un protocole, un chemin ou des
+    espaces, et laisse l'hôte vide au lieu de signaler l'erreur.
+
+    Renvoie le couple (hôte, protocole) — saisir « https:// » impose ce
+    protocole.
+    """
+    host = (host or "").strip()
+    for prefixe in ("https://", "http://"):
+        if host.lower().startswith(prefixe):
+            if prefixe == "https://":
+                protocol = "https"
+            host = host[len(prefixe):]
+            break
+    # Une barre oblique finale, ou un chemin collé à l'adresse, casse
+    # la construction de l'URL de la même manière.
+    return host.rstrip("/").split("/")[0], protocol
+
+
 class HikvisionServer:
     """This is a class for storing basic info about a DVR/NVR.
 
@@ -20,21 +46,7 @@ class HikvisionServer:
     """
 
     def __init__(self, host, user, password, protocol="http"):
-        # L'adresse est attendue sans protocole ni chemin : le préfixe est
-        # ajouté plus bas. Saisir « http://192.168.1.24 » produisait une URL
-        # « http://user:pass@http://192.168.1.24/ISAPI », rejetée par
-        # requests avec un message incompréhensible. On nettoie plutôt que
-        # de laisser échouer.
-        host = (host or "").strip()
-        for prefixe in ("https://", "http://"):
-            if host.lower().startswith(prefixe):
-                if prefixe == "https://":
-                    protocol = "https"
-                host = host[len(prefixe):]
-                break
-        # Une barre oblique finale, ou un chemin collé à l'adresse, casse
-        # la construction de l'URL de la même manière.
-        host = host.rstrip("/").split("/")[0]
+        host, protocol = nettoyer_adresse(host, protocol)
 
         self.host = host
         self.protocol = protocol
