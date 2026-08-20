@@ -1100,6 +1100,12 @@ class Startup(QtWidgets.QDialog):
         self.args.ui_endtime = local_end
         self.args.starttime = local_to_utc(local_start)
         self.args.endtime = local_to_utc(local_end)
+        # Flux cochés : repris tels quels pour être mémorisés d'une session
+        # à l'autre. Une liste vide serait ambiguë (rien coché, ou liste pas
+        # encore remplie ?) : on ne l'écrit que si elle a du contenu.
+        coches = self._canaux_coches()
+        if coches:
+            self.args.cameras = coches
         self.args.debug = self.ui.debug.isChecked()
         self.args.force = self.ui.force.isChecked()
         self.args.localtimefilenames = self.ui.localtime.isChecked()
@@ -1133,7 +1139,13 @@ class Startup(QtWidgets.QDialog):
             self.ui.downloads_folder.setText(file)
 
     def _apply_camera_preselection(self):
-        """Respecte --cameras au lieu de tout cocher systematiquement."""
+        """Coche les flux : ceux demandés, ou le principal à défaut.
+
+        `--cameras` et le choix mémorisé de la session précédente passent par
+        le même chemin. Sans indication, on ne coche que le flux principal :
+        les canaux secondaires enregistrent la même scène, tout cocher
+        téléchargerait chaque séquence en double.
+        """
         wanted = [str(c) for c in (getattr(self.args, 'cameras', None) or [])]
         matched = False
         if wanted:
@@ -1145,9 +1157,42 @@ class Startup(QtWidgets.QDialog):
                 else:
                     item.setCheckState(0, QtCore.Qt.Unchecked)
         if not wanted or not matched:
-            for idx in range(self.ui.cameras.topLevelItemCount()):
-                self.ui.cameras.topLevelItem(idx).setCheckState(
-                    0, QtCore.Qt.Checked)
+            self._cocher_flux_principaux()
+
+    def _cocher_flux_principaux(self):
+        """Coche le flux principal de chaque caméra, décoche les autres.
+
+        Les identifiants Hikvision se lisent « CCS » : le numéro de caméra
+        suivi du numéro de flux. 101 est le flux principal de la caméra 1,
+        102 et 103 ses déclinaisons plus légères. Sur une caméra autonome il
+        n'y a qu'une entrée utile, mais la règle vaut aussi sur enregistreur.
+
+        Repli : si aucun identifiant ne suit cette forme, on coche la
+        première ligne plutôt que de laisser une liste vide, qui bloquerait
+        la recherche sans explication.
+        """
+        total = self.ui.cameras.topLevelItemCount()
+        coche = False
+        for idx in range(total):
+            item = self.ui.cameras.topLevelItem(idx)
+            identifiant = str(self._channel_id(item) or "")
+            principal = identifiant.endswith("1") and len(identifiant) >= 3
+            item.setCheckState(
+                0, QtCore.Qt.Checked if principal else QtCore.Qt.Unchecked)
+            coche = coche or principal
+        if not coche and total:
+            self.ui.cameras.topLevelItem(0).setCheckState(0, QtCore.Qt.Checked)
+
+    def _canaux_coches(self):
+        """Identifiants des flux actuellement cochés dans la liste."""
+        coches = []
+        for idx in range(self.ui.cameras.topLevelItemCount()):
+            item = self.ui.cameras.topLevelItem(idx)
+            if item.checkState(0) == QtCore.Qt.Checked:
+                identifiant = self._channel_id(item)
+                if identifiant:
+                    coches.append(str(identifiant))
+        return coches
 
     @staticmethod
     def _channel_id(item):

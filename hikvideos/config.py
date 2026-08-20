@@ -28,6 +28,9 @@ CHAMPS = (
     'force',
     'ffmpeg',
     'forcetranscoding',
+    # Flux cochés dans la liste. Mémorisé comme les autres réglages : sur une
+    # caméra autonome, on interroge presque toujours le même.
+    'cameras',
 )
 
 
