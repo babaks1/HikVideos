@@ -23,6 +23,11 @@ DOSSIER_CONFIG = os.path.join(
 LANCEUR = os.path.join(DOSSIER_LANCEURS, "hikvideos.desktop")
 EXE_INSTALLE = os.path.join(DOSSIER_APP, "HikVideos")
 
+# Emplacement du paquet .deb. Une installation système fait toujours autorité
+# sur la copie personnelle : c'est elle que le gestionnaire de paquets met à
+# jour, et elle que la désinstallation retire.
+EXE_SYSTEME = "/usr/lib/hikvideos/HikVideos"
+
 GABARIT = """[Desktop Entry]
 Type=Application
 Version=1.0
@@ -151,6 +156,11 @@ def _marquer_icone_bureau():
         pass
 
 
+def _paquet_installe():
+    """Le paquet système est-il en place, quel que soit ce qui tourne ?"""
+    return os.path.isfile(EXE_SYSTEME)
+
+
 def _raccourci_bureau_perime(exe_attendu):
     """Le raccourci du bureau désigne-t-il un autre exécutable ?
 
@@ -188,6 +198,17 @@ def deja_installe():
         if _raccourci_bureau_perime(sys.executable):
             return False
         return _icone_bureau_posee()
+    # Lancé depuis la copie personnelle alors que le paquet est installé :
+    # ne pas détourner les raccourcis vers soi. Sans ce garde-fou, les deux
+    # installations se les disputent — le postinst du paquet les fait pointer
+    # vers /usr/lib, puis le premier lancement de la copie personnelle les
+    # ramène vers elle, et ainsi de suite. Chacun croit réparer une erreur,
+    # et le dernier lancé gagne (constaté le 20/08/2026).
+    #
+    # Le paquet fait autorité : c'est lui que le gestionnaire met à jour.
+    if _paquet_installe():
+        return True
+
     if _raccourci_bureau_perime(EXE_INSTALLE):
         return False
     return os.path.isfile(LANCEUR) and os.path.isfile(EXE_INSTALLE)
