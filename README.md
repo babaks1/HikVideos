@@ -18,6 +18,20 @@ Pour le désinstaller : `sudo apt remove hikvideos`.
 *Vous voulez l'utiliser en ligne de commande, ou modifier le code ? Il existe
 une [autre méthode d'installation](#installation-depuis-les-sources).*
 
+## Mettre à jour
+
+HikVideos ne vous prévient pas quand une nouvelle version sort, et ne se met
+pas à jour tout seul. Pour vérifier, rendez-vous sur la
+**[page des versions](https://github.com/babaks1/HikVideos/releases/latest)** :
+elle affiche toujours la plus récente.
+
+Si elle est plus récente que la vôtre, téléchargez son fichier `.deb` et
+double-cliquez dessus, exactement comme pour l'installation. La nouvelle
+version remplace l'ancienne, vos réglages sont conservés. Rien à désinstaller
+au préalable.
+
+Pour connaître votre version : `apt show hikvideos | grep Version`.
+
 ## À qui ça s'adresse
 
 Vous avez une caméra Hikvision autonome — une caméra seule, branchée au
