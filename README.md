@@ -5,7 +5,7 @@ enregistreur**, depuis Linux.
 
 ## Installation
 
-**[⬇️ Télécharger HikVideos 1.3.2](https://github.com/babaks1/HikVideos/releases/download/v1.3.2/hikvideos_1.3.2_amd64.deb)**
+**[⬇️ Télécharger HikVideos 1.4.0](https://github.com/babaks1/HikVideos/releases/download/v1.4.0/hikvideos_1.4.0_amd64.deb)**
 
 Double-cliquez sur le fichier téléchargé : le logiciel d'installation d'Ubuntu
 s'ouvre, cliquez sur *Installer*.
@@ -47,9 +47,17 @@ HikVideos comble ce manque : il interroge la caméra, affiche la liste des
 enregistrements sur la période demandée, et télécharge ceux que vous
 sélectionnez.
 
+Vous pouvez aussi **prévisualiser un enregistrement avant de le télécharger** :
+cliquez sur une ligne de la liste, puis sur *Lire*. La vidéo s'affiche dans
+l'application, sans rien enregistrer sur votre disque — de quoi reconnaître
+une scène et ne récupérer que ce qui vous intéresse.
+
 ## Ce que ça ne fait pas
 
 - Pas de visionnage en direct — utilisez l'interface web de la caméra ou VLC.
+  La prévisualisation ne concerne que les enregistrements déjà sur la carte.
+- Pas d'avance rapide ni de retour arrière pendant la prévisualisation : la
+  caméra ne permet pas de se déplacer dans un enregistrement à distance.
 - Pas d'enregistrement continu : c'est la caméra qui enregistre, ce logiciel
   ne fait que récupérer. Pour un enregistrement permanent sur ordinateur,
   regardez plutôt du côté de [Frigate](https://frigate.video/).

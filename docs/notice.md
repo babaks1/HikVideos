@@ -102,8 +102,14 @@ derniers chiffres donnent le rang du flux (01 principal, 02 secondaire,
 03 tertiaire), et ce qui précède est le numéro de la caméra. `101` est donc le
 flux principal de la caméra 1, `202` le flux secondaire de la caméra 2.
 
-Les cases cochées déterminent les flux interrogés lors de la recherche. Elles
-sont cochées d'office.
+Les cases cochées déterminent les flux interrogés lors de la recherche. **Seul
+le flux principal de chaque caméra est coché au départ** : les autres filment
+la même scène en plus léger, les cocher tous téléchargerait chaque séquence en
+double.
+
+Vous pouvez en cocher d'autres, ou décocher le principal au profit d'un flux
+plus léger. Votre choix est retenu pour les fois suivantes, comme les autres
+réglages.
 
 ### Caméra autonome ou enregistreur
 
@@ -220,6 +226,47 @@ bloque jamais — l'espace libre annoncé par le système est peu fiable sur un
 disque réseau ou une clé USB, et refuser un téléchargement réalisable serait
 pire que le laisser tenter sa chance.
 
+### Prévisualisation
+
+Avant de télécharger, vous pouvez regarder un enregistrement pour vérifier
+qu'il contient bien ce que vous cherchez.
+
+Cliquez sur une ligne de la liste — pas sur sa case, sur la ligne elle-même —
+puis sur **Lire**. La vidéo s'affiche dans la zone noire, sous le journal.
+Rien n'est enregistré sur votre disque : les images viennent directement de la
+caméra.
+
+Trois commandes : **Lire**, **Pause** et **Arrêter**. Pendant la lecture,
+cliquer sur une autre ligne bascule aussitôt sur celle-ci.
+
+La zone vidéo se redimensionne : tirez la poignée qui la sépare du journal
+pour l'agrandir ou la réduire.
+
+**Ce que la prévisualisation ne permet pas :**
+
+- **Pas d'avance rapide ni de retour arrière.** La caméra envoie
+  l'enregistrement du début à la fin, sans permettre de s'y déplacer. La barre
+  de progression est là pour situer l'avancement, pas pour être cliquée.
+- **La durée exacte n'est connue qu'à la fin.** La caméra arrondit ses
+  horodatages à la seconde : la liste peut annoncer 43 s pour une séquence qui
+  en dure 41. Pendant la lecture, seul le temps écoulé est affiché ; le total
+  apparaît une fois la vidéo terminée.
+- **Pas en même temps qu'un téléchargement.** La caméra n'accepte qu'un flux à
+  la fois : les boutons de lecture sont inactifs pendant un téléchargement, et
+  lancer un téléchargement interrompt une prévisualisation en cours.
+- **La lecture se déroule en temps réel.** Une séquence d'une minute prend une
+  minute — parfois un peu plus, le temps que le flux s'établisse.
+
+**Si la prévisualisation échoue**, un message explique pourquoi et le
+téléchargement, lui, reste toujours possible. Les cas les plus courants :
+
+| Message | Ce qu'il faut faire |
+|---|---|
+| La caméra a refusé une connexion supplémentaire | Attendez quelques secondes : un flux précédent n'est pas encore libéré. |
+| La caméra n'a envoyé aucune image | Rien à faire. Certaines séquences très courtes sont listées par la caméra sans pouvoir être rejouées. |
+| Identifiants refusés | Vérifiez le nom d'utilisateur et le mot de passe. |
+| ffmpeg est introuvable | `sudo apt install ffmpeg` — le paquet `.deb` l'installe normalement tout seul. |
+
 ### Téléchargement
 
 Le bouton de téléchargement traite les enregistrements cochés, un par un.
@@ -260,7 +307,7 @@ défaut — et l'extension suit le format choisi.
 ```
 
 Sont mémorisés : l'adresse, l'identifiant, le dossier de téléchargement, le
-classement, le format vidéo et les cases à cocher. Le **mot de passe ne l'est
+classement, le format vidéo, les flux cochés et les cases à cocher. Le **mot de passe ne l'est
 que si vous avez coché la case prévue**.
 
 Le fichier est écrit avec des permissions restreintes (lecture réservée à
@@ -364,8 +411,11 @@ séquence close. Attendez quelques minutes.
 ## Ce que HikVideos ne fait pas
 
 - **Pas de visionnage en direct.** Utilisez l'interface web de la caméra ou
-  VLC. Notez que le RTSP ne donne accès qu'au direct, jamais aux archives —
-  d'où le passage par HTTP pour les enregistrements.
+  VLC. La prévisualisation ne porte que sur les enregistrements déjà présents
+  sur la carte mémoire.
+- **Pas de déplacement dans un enregistrement.** Ni avance rapide, ni retour
+  arrière : la caméra envoie le flux du début à la fin, sans permettre de s'y
+  positionner.
 - **Pas d'enregistrement continu.** C'est la caméra qui enregistre ; HikVideos
   ne fait que récupérer. Pour un enregistrement permanent sur ordinateur,
   regardez du côté de [Frigate](https://frigate.video/).

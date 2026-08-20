@@ -3,6 +3,40 @@
 Les versions publiées sont téléchargeables depuis la
 [page des releases](../../releases).
 
+## 1.4.0 — 20 août 2026
+
+### Ajouté
+
+- **Prévisualiser un enregistrement avant de le télécharger.** Cliquez sur
+  une ligne de la liste puis sur *Lire* : la vidéo s'affiche dans une zone
+  ajustable sous le journal, sans rien enregistrer sur le disque. De quoi
+  reconnaître une scène et choisir quoi télécharger.
+
+  Commandes *Lire*, *Pause* et *Arrêter*. La barre de progression est
+  indicative : la caméra ne permet pas de se déplacer dans un enregistrement.
+
+  La prévisualisation et le téléchargement ne peuvent pas avoir lieu en même
+  temps — la caméra n'accepte qu'un flux à la fois.
+
+  Rien de nouveau à installer : la lecture utilise ffmpeg, déjà nécessaire
+  depuis la version 1.3.0.
+
+### Modifié
+
+- **Seul le flux principal est coché au départ.** Les autres flux de la caméra
+  filment la même scène en plus léger : tout cocher téléchargeait chaque
+  séquence en double. Cochez ceux que vous voulez, votre choix est retenu pour
+  les fois suivantes.
+
+### Corrigé
+
+- Une adresse de caméra saisie avec `http://` est désormais acceptée partout,
+  et plus seulement à la connexion.
+- **Le raccourci du bureau ne change plus d'une version à l'autre.** Quand le
+  paquet est installé, l'exécutable autonome ne redirige plus les raccourcis
+  vers sa propre copie : les deux installations se les disputaient, et le
+  dernier lancé l'emportait. Le paquet fait désormais autorité.
+
 ## 1.3.2 — 19 août 2026
 
 ### Corrigé
