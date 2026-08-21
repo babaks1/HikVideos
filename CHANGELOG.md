@@ -3,6 +3,45 @@
 Les versions publiées sont téléchargeables depuis la
 [page des releases](../../releases).
 
+## 1.4.2 — 21 août 2026
+
+### Corrigé
+
+- **Les boutons « réduire » et « agrandir » de la première fenêtre ne
+  faisaient rien.** Ils étaient bien dessinés par le système, mais restaient
+  sans effet : la fenêtre de départ était déclarée comme une boîte de
+  dialogue, et l'environnement de bureau refuse ces deux actions aux
+  dialogues. Elle est désormais une fenêtre ordinaire.
+
+  Le défaut n'apparaissait que sous Wayland, la session par défaut d'Ubuntu
+  depuis plusieurs versions. Sous X11, le gestionnaire de fenêtres accordait
+  ces boutons de lui-même.
+
+- **La première fenêtre s'ouvrait dans le coin de l'écran.** Elle s'affiche
+  maintenant au centre, comme la seconde.
+
+- **Le plein écran était perdu en passant d'une fenêtre à l'autre.** Il est
+  désormais conservé dans les deux sens, sans redimensionnement visible.
+
+### Ajouté
+
+- **La taille des fenêtres est mémorisée d'une session à l'autre.** Les deux
+  fenêtres partagent le même réglage : plus besoin de les redimensionner à
+  chaque lancement. Si l'application est quittée en plein écran, elle rouvre
+  en plein écran — et la taille normale précédente reste conservée pour le
+  retour en mode fenêtré.
+
+  Seule la taille est retenue, pas la position : une fenêtre pourrait sinon
+  rouvrir hors de l'écran après un changement de moniteur.
+
+### Modifié
+
+- **La touche Échap ne ferme plus la fenêtre de départ.** Elle le faisait
+  tant que cette fenêtre était une boîte de dialogue. Sur une fenêtre
+  principale, la convention est de l'ignorer — et Échap fermait ici
+  l'application entière, ce qui est brutal pour une touche pressée par
+  réflexe. Les boutons de la barre de titre restent disponibles.
+
 ## 1.4.1 — 21 août 2026
 
 ### Corrigé

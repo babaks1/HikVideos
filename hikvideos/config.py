@@ -60,8 +60,15 @@ def charger():
         return {}
 
 
-def sauvegarder(args, enregistrer_mot_de_passe=False):
-    """Écrit les réglages courants. Échoue en silence : ce n'est qu'un confort."""
+def sauvegarder(args, enregistrer_mot_de_passe=False, fenetre=None):
+    """Écrit les réglages courants. Échoue en silence : ce n'est qu'un confort.
+
+    `fenetre` conserve la taille de la fenêtre et son état plein écran, sous
+    la forme {'largeur': .., 'hauteur': .., 'maximisee': ..}. Ces valeurs ne
+    viennent pas de `args` — d'où ce paramètre séparé plutôt qu'une entrée
+    dans CHAMPS, qui serait effacée à chaque écriture. Omettre l'argument
+    conserve la taille déjà enregistrée.
+    """
     donnees = {}
     for champ in CHAMPS:
         valeur = getattr(args, champ, None)
@@ -71,6 +78,15 @@ def sauvegarder(args, enregistrer_mot_de_passe=False):
     if enregistrer_mot_de_passe:
         donnees['password'] = getattr(args, 'password', '') or ''
     donnees['enregistrer_mot_de_passe'] = bool(enregistrer_mot_de_passe)
+
+    # La taille est écrite par la fenêtre qui se ferme ; les autres appels
+    # ne doivent pas l'effacer, d'où la reprise de la valeur existante.
+    if fenetre is not None:
+        donnees['fenetre'] = fenetre
+    else:
+        ancienne = charger().get('fenetre')
+        if ancienne is not None:
+            donnees['fenetre'] = ancienne
 
     try:
         os.makedirs(_dossier(), exist_ok=True)
@@ -88,6 +104,26 @@ def sauvegarder(args, enregistrer_mot_de_passe=False):
     except OSError as e:
         logger.debug("Configuration non enregistrée (%s)", e)
         return False
+
+
+def geometrie_enregistree():
+    """Taille et état plein écran de la dernière session, ou None.
+
+    Renvoie None dès que la valeur est absente ou aberrante : une taille
+    illisible ne doit pas empêcher l'ouverture d'une fenêtre.
+    """
+    brut = charger().get('fenetre')
+    if not isinstance(brut, dict):
+        return None
+    try:
+        largeur = int(brut.get('largeur', 0))
+        hauteur = int(brut.get('hauteur', 0))
+    except (TypeError, ValueError):
+        return None
+    if largeur <= 0 or hauteur <= 0:
+        return None
+    return {'largeur': largeur, 'hauteur': hauteur,
+            'maximisee': bool(brut.get('maximisee'))}
 
 
 def defauts_parseur():

@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
@@ -258,6 +259,108 @@ class downloadThread(threading.Thread):
 FORMATS_VIDEO = ['mkv', 'mp4', 'avi', 'original']
 
 
+def appliquer_geometrie(fenetre):
+    """Redonne à la fenêtre la taille de la dernière session.
+
+    Renvoie True si le plein écran était en cours à la fermeture ; à
+    l'appelant de le rétablir, l'ordre des appels différant selon la fenêtre.
+
+    Seule la TAILLE est mémorisée, jamais la position : un écran débranché
+    ou une résolution changée rouvrirait la fenêtre hors du bureau, sans
+    moyen simple de la récupérer. Le centrage reste calculé à l'ouverture.
+    """
+    reglages = config.geometrie_enregistree()
+    if not reglages:
+        return False
+    if reglages['maximisee']:
+        return True
+
+    bureau = QtWidgets.QApplication.desktop()
+    zone = bureau.availableGeometry(fenetre)
+    minimum = fenetre.minimumSizeHint()
+    # Bornes : l'écran d'aujourd'hui peut être plus petit que celui d'hier,
+    # et le contenu impose sa propre taille minimale.
+    largeur = max(minimum.width(), min(reglages['largeur'], zone.width()))
+    hauteur = max(minimum.height(), min(reglages['hauteur'], zone.height()))
+    fenetre.resize(largeur, hauteur)
+    return False
+
+
+def retenir_geometrie(fenetre):
+    """Enregistre la taille de la fenêtre et son état plein écran.
+
+    Une fenêtre maximisée renvoie la taille de l'écran : on conserve alors
+    celle qu'elle avait avant, pour qu'un retour en mode normal retrouve
+    les dimensions choisies par l'utilisateur.
+    """
+    maximisee = bool(fenetre.windowState() & QtCore.Qt.WindowMaximized)
+    if maximisee:
+        precedente = config.geometrie_enregistree() or {}
+        largeur = precedente.get('largeur') or fenetre.width()
+        hauteur = precedente.get('hauteur') or fenetre.height()
+    else:
+        largeur, hauteur = fenetre.width(), fenetre.height()
+    return {'largeur': int(largeur), 'hauteur': int(hauteur),
+            'maximisee': maximisee}
+
+
+def preparer_plein_ecran(fenetre, reference=None):
+    """Donne à la fenêtre sa taille de plein écran, AVANT son affichage.
+
+    Sans cela, la fenêtre apparaît d'abord à sa taille normale puis grandit :
+    le redimensionnement est visible à chaque passage d'une fenêtre à
+    l'autre. Poser la géométrie avant show() supprime cette étape.
+
+    La zone à viser n'est pas celle de l'écran : une fenêtre maximisée
+    occupe l'espace disponible moins ses décorations (barre de titre,
+    tableau de bord). Viser l'écran entier laisse un ajustement visible —
+    mesuré : 1080 px demandés pour 1043 px réels. Quand une fenêtre déjà
+    maximisée est disponible (celle qu'on quitte), sa géométrie donne la
+    valeur exacte ; sinon on retranche la décoration estimée.
+    """
+    if reference is not None and reference.isMaximized():
+        fenetre.setGeometry(reference.geometry())
+        return
+    bureau = QtWidgets.QApplication.desktop()
+    zone = bureau.availableGeometry(fenetre)
+    # Hauteur de la décoration : différence entre le cadre et le contenu.
+    cadre = fenetre.frameGeometry().height() - fenetre.geometry().height()
+    if cadre > 0:
+        zone.setHeight(zone.height() - cadre)
+    fenetre.setGeometry(zone)
+
+
+def confirmer_plein_ecran(fenetre, delai_max_ms=1000):
+    """Marque réellement la fenêtre comme maximisée, une fois affichée.
+
+    preparer_plein_ecran() lui donne la bonne taille, mais Qt ne la
+    considère pas pour autant comme maximisée : le bouton « restaurer »
+    de la barre de titre serait sans effet. showMaximized() rétablit
+    l'état — mais il est ignoré tant que le gestionnaire de fenêtres n'a
+    pas pris la fenêtre en charge, et reporter d'un tour de boucle ne
+    suffit pas (mesuré). On attend donc l'exposition effective, plutôt
+    qu'un délai fixe qui serait un pari sur la vitesse de la machine.
+    """
+    poignee = fenetre.windowHandle()
+    if poignee is not None:
+        debut = time.monotonic()
+        while not poignee.isExposed():
+            QtWidgets.QApplication.processEvents(
+                QtCore.QEventLoop.AllEvents, 20)
+            if (time.monotonic() - debut) * 1000 > delai_max_ms:
+                break
+    fenetre.showMaximized()
+
+
+def centrer_fenetre(fenetre):
+    """Place la fenêtre au centre de l'écran où se trouve le pointeur."""
+    cadre = fenetre.frameGeometry()
+    bureau = QtWidgets.QApplication.desktop()
+    ecran = bureau.screenNumber(bureau.cursor().pos())
+    cadre.moveCenter(bureau.screenGeometry(ecran).center())
+    fenetre.move(cadre.topLeft())
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Deroulement : parametres -> recherche -> selection -> telechargement."""
 
@@ -273,6 +376,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.channel_cache = []
         self.channel_cache_key = None
         self.found_recordings = []
+        # Renseigné par le formulaire à sa fermeture (voir Startup.closeEvent)
+        self.maximise_demande = False
+        # La taille de la session précédente n'est reprise qu'au premier
+        # affichage : ensuite, c'est celle que l'utilisateur vient de
+        # choisir qui fait foi.
+        self.premiere_ouverture = True
+        # Taille relevée sur le formulaire à sa fermeture, pour que les deux
+        # fenêtres gardent le même format au cours d'une session.
+        self.taille_courante = None
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -515,12 +627,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.lecteur.arreter()
 
     def _center(self):
-        frameGm = self.frameGeometry()
-        screen = QtWidgets.QApplication.desktop().screenNumber(
-            QtWidgets.QApplication.desktop().cursor().pos())
-        centerPoint = QtWidgets.QApplication.desktop().screenGeometry(screen).center()
-        frameGm.moveCenter(centerPoint)
-        self.move(frameGm.topLeft())
+        centrer_fenetre(self)
 
     # ------------------------------------------------------------------
     # Etape 1 : parametres puis recherche
@@ -528,8 +635,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _open_startup(self):
         self.args = None
         startup = Startup(parent=self, args=self.base_args)
-        startup.show()
-        startup.exec_()
+        # executer() affiche la fenêtre et bloque, comme le faisait exec_().
+        startup.executer()
 
         if self.args is None:
             self.quit_application()
@@ -545,8 +652,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lecteur.definir_camera(
             self.args.server, self.args.username, self.args.password)
 
+        # Reprendre l'état du formulaire plutôt que de recentrer d'office :
+        # sinon un plein écran choisi à l'étape précédente serait annulé.
+        plein_ecran = bool(getattr(self, "maximise_demande", False))
+        # Même taille que le formulaire : les deux fenêtres partagent le
+        # réglage, pour ne pas changer de format en cours de route.
+        if not plein_ecran:
+            taille = getattr(self, "taille_courante", None)
+            if taille:
+                self.resize(*taille)
+            else:
+                appliquer_geometrie(self)
+        else:
+            # Le formulaire qu'on quitte est encore maximisé : sa géométrie
+            # donne la taille exacte, sans ajustement visible ensuite.
+            preparer_plein_ecran(self, reference=startup)
         self.show()
-        self._center()
+        if plein_ecran:
+            confirmer_plein_ecran(self)
+        else:
+            self._center()
         self._set_mode("searching")
 
         self.server = HikvisionServer(
@@ -736,6 +861,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.downloadthread.join(timeout=10)
         self.downloadthread = None
         self.searchthread = None
+        # Chemin inverse : le formulaire rouvert doit conserver le plein
+        # écran choisi ici, comme il le transmet dans l'autre sens.
+        self.maximise_demande = bool(
+            self.windowState() & QtCore.Qt.WindowMaximized)
         self.hide()
         self._open_startup()
 
@@ -772,13 +901,35 @@ class MainWindow(QtWidgets.QMainWindow):
             # n'empêchera pas la fermeture.
             fil.join(timeout=5)
 
+    def _retenir_taille(self):
+        """Conserve la taille de cette fenêtre pour la prochaine session.
+
+        Le formulaire enregistre la sienne à sa fermeture ; sans cela, une
+        fenêtre de travail redimensionnée puis fermée directement perdrait
+        le réglage. Les deux partagent la même entrée : la taille suit
+        l'application, pas la fenêtre.
+        """
+        try:
+            config.sauvegarder(
+                self.args if self.args is not None else self.base_args,
+                enregistrer_mot_de_passe=bool(
+                    config.charger().get('enregistrer_mot_de_passe')),
+                fenetre=retenir_geometrie(self))
+        except Exception as exc:
+            # Simple confort : ne doit jamais empêcher la fermeture.
+            logging.getLogger('hikvideos').debug(
+                "Taille de fenêtre non enregistrée : %s", exc)
+
     def quit_application(self):
         self.quitting = True
+        if self.isVisible():
+            self._retenir_taille()
         self._arreter_proprement()
         QtWidgets.QApplication.quit()
 
     def closeEvent(self, event):
         self.quitting = True
+        self._retenir_taille()
         self._arreter_proprement()
         event.accept()
         QtWidgets.QApplication.quit()
@@ -796,14 +947,41 @@ class ErrorDialog(QtWidgets.QMessageBox):
         self.setInformativeText(message)
 
 
-class Startup(QtWidgets.QDialog):
+class Startup(QtWidgets.QWidget):
+    """Formulaire de départ.
+
+    Fenêtre ordinaire, et non QDialog : sous GNOME, une fenêtre déclarée
+    comme dialogue (_NET_WM_WINDOW_TYPE_DIALOG) se voit refuser les boutons
+    « réduire » et « agrandir » — le gestionnaire de fenêtres décide seul,
+    les drapeaux Qt n'y changent rien. X11 était plus permissif, d'où un
+    comportement qui a changé au passage à Wayland.
+
+    Le blocage que fournissait exec_() est reproduit par executer(), dont
+    dépend l'enchaînement : main() lit window.quitting juste après la
+    construction de MainWindow, ce qui suppose que le formulaire ait déjà
+    rendu la main.
+
+    La touche Échap ne ferme plus la fenêtre, contrairement à l'ancien
+    QDialog : les recommandations GNOME réservent ce raccourci aux
+    dialogues, et Qt lui-même l'ignore sur une fenêtre principale. Ici,
+    Échap fermerait l'application entière — geste réflexe aux
+    conséquences lourdes, alors que la barre de titre offre désormais
+    tous les boutons voulus.
+    """
+
     def __init__(self, parent=None, args=None):
         super(Startup, self).__init__()
+        # Sans ce drapeau, un QWidget créé sans parent Qt reste une fenêtre,
+        # mais on l'explicite : c'est lui qui garantit une fenêtre de premier
+        # niveau, donc décorée comme telle.
+        self.setWindowFlags(QtCore.Qt.Window)
         self.ui = Ui_Startup()
         self.ui.setupUi(self)
         self.args = args
         self.parent = parent
         self.skipclosing = False
+        # Boucle locale tenant lieu de exec_() ; voir executer().
+        self._boucle = None
 
         # Les selecteurs affichent l'heure LOCALE (etaient en UTC a l'origine)
         self.ui.start_date.setTimeSpec(QtCore.Qt.LocalTime)
@@ -1326,26 +1504,75 @@ class Startup(QtWidgets.QDialog):
         try:
             config.sauvegarder(
                 self._lire_formulaire(),
-                enregistrer_mot_de_passe=self.save_password.isChecked())
+                enregistrer_mot_de_passe=self.save_password.isChecked(),
+                fenetre=retenir_geometrie(self))
         except Exception as exc:
             # La mémorisation est un confort : elle ne doit jamais empêcher
             # la fermeture de la fenêtre.
             logging.getLogger('hikvideos').debug(
                 "Réglages non enregistrés : %s", exc)
 
+    def executer(self):
+        """Affiche le formulaire et bloque jusqu'à sa fermeture.
+
+        Remplace QDialog.exec_(). Le blocage n'est pas un confort : main()
+        consulte window.quitting dès le retour du constructeur de
+        MainWindow, et new_extraction() poursuit son travail à la ligne
+        suivante. Une fenêtre qui rendrait la main aussitôt ferait
+        démarrer la suite avec des paramètres encore vides.
+
+        La boucle est imbriquée dans celle de l'application lorsque le
+        formulaire est rouvert par « Retour » ; Qt le permet, et un
+        QMessageBox ouvert par-dessus (test de connexion) s'imbrique de
+        la même façon.
+        """
+        # QDialog centrait sa fenêtre à l'ouverture ; un QWidget la place
+        # dans le coin supérieur gauche. On reprend le calcul employé par
+        # la fenêtre principale — sauf si l'étape précédente était en plein
+        # écran, auquel cas on le conserve.
+        # Deux sources : l'état hérité de la fenêtre précédente au cours
+        # d'une même session, et la taille de la session précédente au tout
+        # premier affichage.
+        plein_ecran = bool(getattr(self.parent, "maximise_demande", False))
+        if not plein_ecran and getattr(self.parent, "premiere_ouverture", True):
+            plein_ecran = appliquer_geometrie(self)
+        if plein_ecran:
+            # Avant show() : sinon la fenêtre s'affiche en petit puis grandit.
+            # La fenêtre principale, encore maximisée, donne la taille exacte.
+            preparer_plein_ecran(self, reference=self.parent)
+        self.show()
+        if plein_ecran:
+            confirmer_plein_ecran(self)
+        else:
+            centrer_fenetre(self)
+        if self.parent is not None:
+            self.parent.premiere_ouverture = False
+        self._boucle = QtCore.QEventLoop()
+        self._boucle.exec_()
+
+    def _liberer_boucle(self):
+        """Rend la main à executer(). Sans effet si aucune boucle ne tourne."""
+        if self._boucle is not None and self._boucle.isRunning():
+            self._boucle.quit()
+        self._boucle = None
+
     def closeEvent(self, event):
         event.accept()
+        # État et taille sont relevés ici, tant que la fenêtre existe
+        # encore : la fenêtre suivante s'y conformera, pour ne pas changer
+        # de format au milieu du parcours. Vrai aussi quand l'utilisateur
+        # valide — d'où la lecture avant le test sur skipclosing.
+        if self.parent is not None:
+            self.parent.maximise_demande = bool(
+                self.windowState() & QtCore.Qt.WindowMaximized)
+            self.parent.taille_courante = (self.width(), self.height())
         if self.skipclosing:
+            self._liberer_boucle()
             return
         self._memoriser_reglages()
         if self.parent is not None:
             self.parent.args = None
-
-    def reject(self):
-        self._memoriser_reglages()
-        if self.parent is not None:
-            self.parent.args = None
-        self.close()
+        self._liberer_boucle()
 
 
 def main(args=None):
