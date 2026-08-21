@@ -3,6 +3,14 @@
 Récupérer les enregistrements d'une caméra Hikvision **sans passer par un
 enregistreur**, depuis Linux.
 
+![Le formulaire de départ](docs/images/formulaire.png)
+
+On saisit l'adresse de la caméra et la période voulue, puis on choisit les
+enregistrements à récupérer dans la liste. Une prévisualisation permet de
+vérifier une séquence avant de la télécharger.
+
+![La liste des enregistrements et le lecteur](docs/images/telechargement.png)
+
 ## Installation
 
 **[⬇️ Télécharger HikVideos 1.4.3](https://github.com/babaks1/HikVideos/releases/download/v1.4.3/hikvideos_1.4.3_amd64.deb)**
