@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-1.4.2}"
+VERSION="${1:-1.4.3}"
 ARCH="$(dpkg --print-architecture)"
 NOM="hikvideos_${VERSION}_${ARCH}"
 BUILD="$ICI/build/deb/$NOM"

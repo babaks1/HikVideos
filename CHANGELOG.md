@@ -3,6 +3,41 @@
 Les versions publiées sont téléchargeables depuis la
 [page des releases](../../releases).
 
+## 1.4.3 — 21 août 2026
+
+### Modifié
+
+- **Le formulaire de départ est organisé en quatre parties encadrées** :
+  *Caméra*, *Période et format*, *Flux disponibles* et *Options avancées*.
+  Rien n'indiquait jusqu'ici où commençait chaque groupe de réglages.
+
+- **L'action principale ressort.** Sur les deux fenêtres, le bouton qui fait
+  avancer — *Rechercher*, puis *Télécharger la sélection* — est mis en avant
+  par le style du système. Presser Entrée ne déclenche pour autant aucun
+  téléchargement.
+
+- **Les boutons sont regroupés par usage** : les actions sur la sélection à
+  gauche, *Retour* et *Quitter* à droite. On ne quitte plus l'application en
+  visant le bouton d'à côté.
+
+- **La liste des enregistrements est plus lisible**, ses lignes étant moins
+  serrées.
+
+### Corrigé
+
+- **Alignements.** La barre de progression du téléchargement dépassait de
+  20 pixels de chaque côté du contenu qu'elle surmonte ; celle de la
+  prévisualisation s'arrêtait avant le bord de l'image, à cause d'un espace
+  réservé en permanence pour le temps écoulé, même à l'arrêt.
+
+- **La taille des fenêtres se transmet dans les deux sens.** Agrandir la
+  fenêtre de téléchargement puis revenir au formulaire rouvrait celui-ci à
+  sa taille d'origine.
+
+- **Trois libellés** : « Periode » sans accent, un message d'attente sans
+  accent circonflexe et peu clair, et un tiret qui ne suivait pas la
+  ponctuation du reste de l'interface.
+
 ## 1.4.2 — 21 août 2026
 
 ### Corrigé

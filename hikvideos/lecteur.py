@@ -561,13 +561,24 @@ class Lecteur(QtWidgets.QWidget):
         self.progression.setFixedHeight(6)
 
         self.horloge = QtWidgets.QLabel("", self)
-        self.horloge.setMinimumWidth(90)
+        self.horloge.setVisible(False)
         self.horloge.setAlignment(
             QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
 
         barre.addWidget(self.bouton_lire)
         barre.addWidget(self.bouton_pause)
         barre.addWidget(self.bouton_arreter)
+
+        # L'horloge est placée AU-DESSUS de la barre, et non à sa droite :
+        # elle réservait 90 px en permanence, y compris à l'arrêt où elle
+        # est vide, ce qui empêchait la barre d'atteindre le bord droit de
+        # l'image. Le comportement de la barre est inchangé — seule sa
+        # largeur disponible augmente.
+        # L'horloge est replacée à droite de la barre, mais SANS largeur
+        # réservée : elle ne prend de la place que lorsqu'elle affiche
+        # quelque chose. À l'arrêt, où elle est vide, la barre occupe donc
+        # toute la largeur jusqu'au bord de l'image — et reste alignée sur
+        # la hauteur des boutons, ce qu'un empilement vertical ne permet pas.
         barre.addWidget(self.progression, 1)
         barre.addWidget(self.horloge)
         return barre
@@ -575,6 +586,16 @@ class Lecteur(QtWidgets.QWidget):
     # ------------------------------------------------------------------
     # Affichage
     # ------------------------------------------------------------------
+    def _ecrire_horloge(self, texte):
+        """Écrit le temps écoulé, et efface le libellé quand il est vide.
+
+        Un QLabel vide occupe tout de même quelques pixels de largeur : le
+        masquer laisse la barre de progression aller jusqu'au bord de
+        l'image, ce qu'elle fait à l'arrêt où aucun temps n'est affiché.
+        """
+        self.horloge.setText(texte)
+        self.horloge.setVisible(bool(texte))
+
     def _afficher_message(self, texte):
         self.message.setText(texte)
         self.pile.setCurrentWidget(self.message)
@@ -604,18 +625,18 @@ class Lecteur(QtWidgets.QWidget):
         la fin, quand il est enfin connu.
         """
         if not definitif:
-            self.horloge.setText(_horodatage(position_ms) if position_ms else "")
+            self._ecrire_horloge(_horodatage(position_ms) if position_ms else "")
             return
         if self._duree_connue > 0:
             # Le total affiché suit la même échelle que la barre : sans cela
             # on lirait « 0:21 / 0:20 », qui ferait douter des deux.
             total = max(self._duree_connue, self.progression.maximum())
-            self.horloge.setText("%s / %s" % (
+            self._ecrire_horloge("%s / %s" % (
                 _horodatage(position_ms), _horodatage(total)))
         elif position_ms:
-            self.horloge.setText(_horodatage(position_ms))
+            self._ecrire_horloge(_horodatage(position_ms))
         else:
-            self.horloge.setText("")
+            self._ecrire_horloge("")
 
     # ------------------------------------------------------------------
     # Sélection
@@ -700,7 +721,7 @@ class Lecteur(QtWidgets.QWidget):
         self._joue = False
         self.bouton_pause.setText("Pause")
         self.progression.setValue(0)
-        self.horloge.setText("")
+        self._ecrire_horloge("")
         self._derniere_image = None
         self.video.clear()
         if disponible():
@@ -813,6 +834,6 @@ class Lecteur(QtWidgets.QWidget):
         self._joue = False
         self.bouton_pause.setText("Pause")
         self.progression.setValue(0)
-        self.horloge.setText("")
+        self._ecrire_horloge("")
         self._afficher_message(message)
         self._rafraichir_boutons()

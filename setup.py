@@ -10,7 +10,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="hikvideos",
-    version="1.4.2",
+    version="1.4.3",
     description="Télécharger les enregistrements d'une caméra HikVision autonome",
     long_description=README,
     long_description_content_type="text/markdown",

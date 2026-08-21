@@ -392,12 +392,45 @@ class MainWindow(QtWidgets.QMainWindow):
         self._add_lecteur()
         self._add_controls()
 
+        self._aligner_barre_progression()
+
         self.logtimer = QtCore.QTimer(self)
         self.logtimer.timeout.connect(self._tick)
         self.logtimer.start(200)
 
         self._avertir_si_ffmpeg_absent()
         self._open_startup()
+
+    def _aligner_barre_progression(self):
+        """Aligne la barre de téléchargement sur le contenu qu'elle surmonte.
+
+        Le contenu (journal, lecteur, liste) est encadré par deux espaceurs
+        de 20 px hérités de l'amont — déclarés verticaux alors qu'ils sont
+        posés dans une rangée horizontale, donc sans autre effet que ce
+        retrait. La barre, elle, occupe toute la largeur de la grille : ses
+        extrémités dépassaient de 20 px de chaque côté.
+
+        On ne touche ni au maximum, ni à la valeur, ni au format de la
+        barre : seule sa marge latérale change.
+        """
+        marge = 0
+        rangee = getattr(self.ui, "horizontalLayout", None)
+        if rangee is not None and rangee.count():
+            premier = rangee.itemAt(0)
+            if premier is not None and premier.spacerItem() is not None:
+                marge = premier.sizeHint().width()
+        if marge <= 0:
+            return
+        contenant = QtWidgets.QHBoxLayout()
+        contenant.setContentsMargins(marge, 0, marge, 0)
+        grille = self.ui.gridLayout
+        index = grille.indexOf(self.ui.progressBar)
+        if index < 0:
+            return
+        ligne, colonne, hauteur, largeur = grille.getItemPosition(index)
+        grille.removeWidget(self.ui.progressBar)
+        contenant.addWidget(self.ui.progressBar)
+        grille.addLayout(contenant, ligne, colonne, hauteur, largeur)
 
     def _avertir_si_ffmpeg_absent(self):
         """Prévient au démarrage plutôt qu'au premier échec de conversion.
@@ -420,6 +453,8 @@ class MainWindow(QtWidgets.QMainWindow):
     # ------------------------------------------------------------------
     # Interface
     # ------------------------------------------------------------------
+    ESPACE_LIGNE = 8   # pixels ajoutés à la hauteur naturelle d'une ligne
+
     def _setup_tree(self):
         tree = self.ui.treeWidget
         tree.setColumnCount(len(self.COLUMNS))
@@ -428,6 +463,11 @@ class MainWindow(QtWidgets.QMainWindow):
         tree.setAlternatingRowColors(True)
         tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         tree.setSortingEnabled(False)
+        # Les lignes par défaut sont serrées (17 px) : quelques pixels de
+        # plus rendent la liste lisible sans changer sa structure.
+        tree.setStyleSheet(
+            "QTreeView::item { padding-top: %dpx; padding-bottom: %dpx; }"
+            % (self.ESPACE_LIGNE // 2, self.ESPACE_LIGNE // 2))
 
         self._updating_checks = False
         tree.itemChanged.connect(self._on_item_changed)
@@ -484,6 +524,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         vlayout.addWidget(self.selection_bar)
         vlayout.addWidget(tree)
+        # Conservée pour y placer la barre de boutons : ils s'alignent ainsi
+        # sur la liste de sélection, et non sur la fenêtre entière.
+        self._colonne_selection = vlayout
 
         # Les proportions colonne gauche / droite sont definies par index
         parent_layout.setStretch(1, 2)
@@ -531,7 +574,7 @@ class MainWindow(QtWidgets.QMainWindow):
         text = "%d / %d sélectionné%s" % (
             checked, total, "s" if checked >= 2 else "")
         if total_bytes:
-            text += "  -  %s" % format_size(total_bytes)
+            text += "  —  %s" % format_size(total_bytes)
         self.selection_label.setText(text)
 
     def _on_current_item_changed(self, item, _precedent):
@@ -589,12 +632,30 @@ class MainWindow(QtWidgets.QMainWindow):
         self.new_button = QtWidgets.QPushButton("Retour", self)
         self.quit_button = QtWidgets.QPushButton("Quitter", self)
 
-        bar.addStretch(1)
+        # L'action principale est mise en avant par Qt lui-même : le style
+        # du système s'en charge, plutôt qu'une couleur choisie ici qui
+        # jurerait avec un thème sombre.
+        self.download_button.setDefault(True)
+        self.download_button.setAutoDefault(False)
+
+        # Deux groupes séparés par un ressort : les actions sur la sélection
+        # à gauche, la navigation à droite. On ne quitte pas l'application en
+        # visant le bouton d'à côté.
         bar.addWidget(self.download_button)
         bar.addWidget(self.stop_button)
+        bar.addStretch(1)
         bar.addWidget(self.new_button)
         bar.addWidget(self.quit_button)
-        self.ui.gridLayout.addLayout(bar, 2, 0, 1, 1)
+        # Sous la liste de sélection, pas en pied de fenêtre : les boutons
+        # agissent sur cette liste, ils s'alignent donc sur elle.
+        colonne = getattr(self, "_colonne_selection", None)
+        if colonne is not None:
+            # Détache les boutons de la liste : sans cet espace, ils
+            # semblent en faire partie.
+            colonne.addSpacing(6)
+            colonne.addLayout(bar)
+        else:
+            self.ui.gridLayout.addLayout(bar, 2, 0, 1, 1)
 
         self.download_button.clicked.connect(self.start_download)
         self.stop_button.clicked.connect(self.stop_download)
@@ -862,9 +923,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.downloadthread = None
         self.searchthread = None
         # Chemin inverse : le formulaire rouvert doit conserver le plein
-        # écran choisi ici, comme il le transmet dans l'autre sens.
+        # écran ET la taille choisis ici, comme il les transmet dans l'autre
+        # sens. Relevé avant hide(), tant que la fenêtre a ses dimensions.
         self.maximise_demande = bool(
             self.windowState() & QtCore.Qt.WindowMaximized)
+        if not self.maximise_demande:
+            self.taille_courante = (self.width(), self.height())
         self.hide()
         self._open_startup()
 
@@ -1004,6 +1068,8 @@ class Startup(QtWidgets.QWidget):
         args, self._mot_de_passe_memorise = config.appliquer(
             args, defauts=config.defauts_parseur())
         self.args = args
+        self._encadrer_sections()
+        self._encadrer_options()
         self._add_password_checkbox()
 
         self.populate_with_args(args)
@@ -1019,6 +1085,11 @@ class Startup(QtWidgets.QWidget):
             "Recherche les enregistrements sur la période choisie. "
             "Le téléchargement se lance ensuite depuis la liste.")
         self.ui.start_downloading_button.setEnabled(False)
+        # Aboutissement de l'étape : mis en avant comme « Télécharger la
+        # sélection » l'est sur la fenêtre suivante.
+        self.ui.start_downloading_button.setDefault(True)
+        self.ui.start_downloading_button.setAutoDefault(False)
+        self.ui.test_connection_button.setAutoDefault(False)
         self._restore_channels()
 
     # ------------------------------------------------------------------
@@ -1109,7 +1180,7 @@ class Startup(QtWidgets.QWidget):
         layout.addStretch(1)
 
         try:
-            self.ui.formLayout.addRow(QtWidgets.QLabel("Periode"), container)
+            self.ui.formLayout.addRow(QtWidgets.QLabel("Période"), container)
         except AttributeError:
             pass
 
@@ -1156,6 +1227,109 @@ class Startup(QtWidgets.QWidget):
             self.ui.cameras.insertTopLevelItems(i, [item])
         self._apply_camera_preselection()
         self.ui.start_downloading_button.setEnabled(True)
+
+    @staticmethod
+    def _cadre(titre, parent):
+        """Cadre intitulé, titre en gras.
+
+        Qt n'appuie pas le titre d'un QGroupBox : il s'affiche du même poids
+        que le contenu, et ne se distingue donc pas d'un libellé ordinaire.
+        """
+        boite = QtWidgets.QGroupBox(titre, parent)
+        boite.setStyleSheet(Startup.STYLE_CADRE)
+        return boite
+
+    # « QGroupBox > * » ne viserait que les enfants DIRECTS : les libellés
+    # imbriqués (dates, période) hériteraient du gras. Le sélecteur
+    # descendant « QGroupBox * » les couvre tous.
+    #
+    # La bordure est volontairement discrète : un trait plein tranchait sur
+    # le fond de l'application et découpait la fenêtre en compartiments.
+    STYLE_CADRE = (
+        "QGroupBox {"
+        "  font-weight: bold;"
+        "  border: 1px solid palette(midlight);"
+        "  border-radius: 4px;"
+        "  margin-top: 10px;"
+        "  padding-top: 6px;"
+        "}"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin;"
+        "  subcontrol-position: top left;"
+        "  left: 8px;"
+        "  padding: 0 4px;"
+        "}"
+        "QGroupBox * { font-weight: normal; }")
+
+    def _encadrer_sections(self):
+        """Donne un cadre intitulé aux quatre parties du formulaire.
+
+        Un QGroupBox porte son propre titre : cadre et texte ne font qu'un,
+        rien à glisser entre des widgets existants — donc pas de risque de
+        chevauchement, contrairement à des libellés ajoutés à la main.
+        """
+        # 1. Les identifiants. La grille appartient déjà à un parent :
+        # setLayout() échouerait. On l'extrait de la disposition principale
+        # pour la replacer à l'intérieur du cadre.
+        grille = self.ui.gridLayout
+        cadre_cam = self._cadre("Caméra", self)
+        principale = self.ui.gridLayout_2
+        index = principale.indexOf(grille)
+        if index >= 0:
+            principale.takeAt(index)
+        interne_cam = QtWidgets.QVBoxLayout(cadre_cam)
+        interne_cam.setContentsMargins(6, 6, 6, 6)
+        interne_cam.addLayout(grille)
+        principale.addWidget(cadre_cam, 0, 0, 1, 2)
+
+        # 2. Le cadre existait déjà, sans titre.
+        self.ui.groupBox.setTitle("Période et format")
+        self.ui.groupBox.setStyleSheet(Startup.STYLE_CADRE)
+
+        # 3. La liste des flux : son en-tête de colonne servait de titre,
+        # faute de mieux. Il est masqué, et la liste passe dans un cadre.
+        self.ui.cameras.setHeaderHidden(True)
+        rangee = self.ui.horizontalLayout_3
+        index = rangee.indexOf(self.ui.cameras)
+        if index >= 0:
+            rangee.takeAt(index)
+            cadre_flux = self._cadre("Flux disponibles", self)
+            interne = QtWidgets.QVBoxLayout(cadre_flux)
+            interne.setContentsMargins(6, 6, 6, 6)
+            interne.addWidget(self.ui.cameras)
+            rangee.insertWidget(index, cadre_flux)
+            rangee.setStretch(0, 3)
+            rangee.setStretch(index, 2)
+
+    def _encadrer_options(self):
+        """Regroupe les cases à cocher dans un cadre intitulé.
+
+        Un QGroupBox porte son propre titre : cadre et texte ne font qu'un,
+        il n'y a pas de libellé à glisser entre des widgets existants — donc
+        pas de risque de chevauchement.
+        """
+        colonne = self.ui.verticalLayout
+
+        # Le layout d'origine appartient déjà à un parent : setLayout() sur
+        # le cadre échouerait (« QLayout already has a parent »). On déplace
+        # donc les cases une à une dans une nouvelle colonne, qui est celle
+        # du cadre.
+        cadre = self._cadre("Options avancées", self)
+        interne = QtWidgets.QVBoxLayout(cadre)
+        interne.setSpacing(4)
+
+        cases = []
+        while colonne.count():
+            item = colonne.takeAt(0)
+            if item.widget() is not None:
+                cases.append(item.widget())
+        for case in cases:
+            interne.addWidget(case)
+
+        # La colonne vidée reste en place dans la disposition : on y insère
+        # le cadre, qui prend la place qu'elle occupait.
+        colonne.addWidget(cadre)
+        return cadre
 
     def _add_password_checkbox(self):
         """Case « Enregistrer le mot de passe », sous le champ du mot de passe.
@@ -1534,8 +1708,15 @@ class Startup(QtWidgets.QWidget):
         # d'une même session, et la taille de la session précédente au tout
         # premier affichage.
         plein_ecran = bool(getattr(self.parent, "maximise_demande", False))
-        if not plein_ecran and getattr(self.parent, "premiere_ouverture", True):
-            plein_ecran = appliquer_geometrie(self)
+        if not plein_ecran:
+            if getattr(self.parent, "premiere_ouverture", True):
+                plein_ecran = appliquer_geometrie(self)
+            else:
+                # Retour depuis la fenêtre de travail : on reprend la taille
+                # qu'elle avait, pour ne pas rétrécir en cours de route.
+                taille = getattr(self.parent, "taille_courante", None)
+                if taille:
+                    self.resize(*taille)
         if plein_ecran:
             # Avant show() : sinon la fenêtre s'affiche en petit puis grandit.
             # La fenêtre principale, encore maximisée, donne la taille exacte.

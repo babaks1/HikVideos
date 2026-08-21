@@ -298,7 +298,7 @@
        </column>
        <item>
         <property name="text">
-         <string>Appuyez sur connexion pour voir la liste apparaitre</string>
+         <string>Cliquez sur « Connexion » pour afficher les flux de la caméra</string>
         </property>
        </item>
       </widget>

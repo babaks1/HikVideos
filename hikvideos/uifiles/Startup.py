@@ -199,7 +199,7 @@ class Ui_Startup(object):
         self.cameras.headerItem().setText(0, _translate("Startup", "Flux disponibles"))
         __sortingEnabled = self.cameras.isSortingEnabled()
         self.cameras.setSortingEnabled(False)
-        self.cameras.topLevelItem(0).setText(0, _translate("Startup", "Appuyez sur connexion pour voir la liste apparaitre"))
+        self.cameras.topLevelItem(0).setText(0, _translate("Startup", "Cliquez sur « Connexion » pour afficher les flux de la caméra"))
         self.cameras.setSortingEnabled(__sortingEnabled)
         self.test_connection_button.setText(_translate("Startup", "Connexion"))
         self.start_downloading_button.setText(_translate("Startup", "Rechercher"))
