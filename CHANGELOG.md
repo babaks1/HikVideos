@@ -3,6 +3,28 @@
 Les versions publiées sont téléchargeables depuis la
 [page des releases](../../releases).
 
+## 1.4.1 — 21 août 2026
+
+### Corrigé
+
+- **Messages trompeurs à l'arrêt d'un téléchargement.** Interrompre un
+  téléchargement affichait « Tous les enregistrements ont été téléchargés »,
+  et le fichier interrompu était compté comme récupéré. Le journal indique
+  désormais ce qui a réellement été obtenu :
+  « Arrêt : 1 fichier(s) récupéré(s) sur 2, 1 interrompu(s) ».
+
+  Le message affiché au clic sur *Arrêter* annonçait par ailleurs que le
+  fichier en cours allait se terminer, alors qu'il est interrompu.
+
+- **Fichiers partiels laissés sur le disque.** Le morceau de vidéo
+  téléchargé avant un arrêt (fichier `.part`) n'était jamais effacé et
+  s'accumulait silencieusement dans le dossier de téléchargement. Il est
+  maintenant supprimé. Les fichiers complets du même lot sont conservés.
+
+- **Menus du clic droit en anglais.** Le menu contextuel du journal et des
+  champs de saisie affichait « Undo / Copy / Paste… ». Il est désormais en
+  français, comme le reste de l'interface.
+
 ## 1.4.0 — 20 août 2026
 
 ### Ajouté

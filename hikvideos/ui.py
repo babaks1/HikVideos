@@ -204,12 +204,12 @@ class downloadThread(threading.Thread):
         create_folder_and_chdir(self.args.downloads)
         original_path = os.path.abspath(os.getcwd())
 
+        interrompus = 0
+
         for recordingobj in recordings:
             if self.running is False:
                 self.stopped_by_user = True
-                logger.info("Arrêt demandé : %d fichier(s) récupéré(s) sur %d"
-                            % (self.finished, total))
-                return
+                break
 
             self.bytes_current = 0
 
@@ -218,10 +218,11 @@ class downloadThread(threading.Thread):
                 _self.bytes_current = recu
                 return _self.running
 
+            interrompu = False
             try:
-                download_recording(self.server, self.args,
-                                   recordingobj, original_path,
-                                   progress_callback=avancement)
+                interrompu = bool(download_recording(
+                    self.server, self.args, recordingobj, original_path,
+                    progress_callback=avancement))
             except Exception as exc:
                 logger.error("Échec sur %s : %s" % (recordingobj, exc))
 
@@ -230,9 +231,25 @@ class downloadThread(threading.Thread):
             # avec le total calculé au départ.
             self.bytes_done += recording_size(recordingobj)
             self.bytes_current = 0
+
+            # Un fichier interrompu n'est pas un fichier récupéré : le
+            # compter fausserait le décompte final. L'arrêt étant testé en
+            # tête de boucle, il ne serait jamais vu si l'utilisateur coupe
+            # pendant le dernier fichier — d'où la sortie ici.
+            if interrompu:
+                interrompus += 1
+                self.stopped_by_user = True
+                break
             self.finished += 1
 
-        logger.info("Tous les enregistrements ont été téléchargés")
+        if self.stopped_by_user:
+            message = ("Arrêt : %d fichier(s) récupéré(s) sur %d"
+                       % (self.finished, total))
+            if interrompus:
+                message += ", %d interrompu(s)" % interrompus
+            logger.info(message)
+        else:
+            logger.info("Tous les enregistrements ont été téléchargés")
 
 
 # Ordre des formats dans la liste déroulante. Il doit suivre exactement
@@ -710,7 +727,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.downloadthread is not None and self.downloadthread.is_alive():
             self.downloadthread.running = False
             logging.getLogger('hikvideos').info(
-                "Arrêt demandé : le fichier en cours se termine, puis arrêt.")
+                "Arrêt demandé : le téléchargement en cours est interrompu.")
         self.stop_button.setEnabled(False)
 
     def new_extraction(self):
@@ -1355,6 +1372,19 @@ def main(args=None):
     # lancement). En créer une seconde invalide la première et fait planter Qt
     # à l'ouverture de la fenêtre : on réutilise celle qui existe.
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+
+    # Les menus contextuels des champs de saisie et du journal (Annuler,
+    # Copier, Coller...) sont fournis par Qt, pas par l'application : ils
+    # restent en anglais tant que la traduction de Qt n'est pas chargée.
+    # Le fichier est embarqué dans PyQt5, donc présent aussi dans
+    # l'exécutable autonome. Conservé dans une variable liée à app : un
+    # traducteur détruit par le ramasse-miettes cesse d'agir.
+    app._traducteur_qt = QtCore.QTranslator()
+    if app._traducteur_qt.load(
+            "qtbase_fr",
+            QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.TranslationsPath)):
+        app.installTranslator(app._traducteur_qt)
+
     window = MainWindow(args)
     if not window.quitting:
         app.exec_()

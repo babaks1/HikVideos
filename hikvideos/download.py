@@ -220,6 +220,13 @@ def _supprimer_si_present(chemin):
 
 def video_download_from_channel(server: hikvisionapi.HikvisionServer, args, url, filename, cid,
                                 progress_callback=None):
+    """Télécharge un enregistrement.
+
+    Renvoie True si le transfert a été interrompu à la demande de
+    l'appelant (via progress_callback), None sinon. L'appelant a besoin
+    de cette distinction : un fichier interrompu ne doit pas être compté
+    comme réussi.
+    """
     start_time = time.perf_counter()
     # Nom provisoire : avec « original », comme lorsque la caméra livre un
     # format inattendu, l'extension définitive n'est connue qu'après analyse
@@ -315,8 +322,12 @@ def video_download_from_channel(server: hikvisionapi.HikvisionServer, args, url,
             # au fil des téléchargements.
             r.close()
         if interrompu:
+            # Le fichier partiel n'est qu'un morceau de vidéo, illisible :
+            # le laisser encombrerait le dossier sans que l'utilisateur
+            # sache d'où il vient.
+            _supprimer_si_present(temporaryname)
             logging.info("Téléchargement interrompu : %s" % name)
-            return
+            return True
         # Les paramètres n'ont d'intérêt qu'en diagnostic : le mot de passe
         # y est masqué par le filtre installé au démarrage.
         logging.debug(args)
@@ -477,9 +488,14 @@ def download_recording(server: hikvisionapi.HikvisionServer, args, recordingobj:
             name = re.sub(r'[-T\:Z]', '', recordingobj.startTime)
 
         if not args.skipdownload:
-            video_download_from_channel(
-                server, args, recordingobj.url, name, recordingobj.cid,
-                progress_callback=progress_callback)
+            # Le retour signale une interruption demandée par l'appelant :
+            # il doit remonter jusqu'au fil de téléchargement.
+            if video_download_from_channel(
+                    server, args, recordingobj.url, name, recordingobj.cid,
+                    progress_callback=progress_callback):
+                if args.folders:
+                    os.chdir(original_path)
+                return True
         else:
             logging.debug("Skipping download of %s" % recordingobj.url)
 
